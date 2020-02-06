@@ -8,7 +8,7 @@ from polyswarmartifact.schema import verdict
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.events import RevealAssertion, SettleBounty
-from polyswarmclient.exceptions import InvalidBidError
+from polyswarmclient.exceptions import InvalidBidError, FatalError, LowBalanceError
 from polyswarmclient.filters.bountyfilter import BountyFilter
 from polyswarmclient.filters.confidencefilter import ConfidenceModifier
 from polyswarmclient.filters.filter import MetadataFilter
@@ -182,8 +182,7 @@ class AbstractMicroengine(object):
         """
         self.bounties_pending_locks[chain] = asyncio.Lock()
         if self.scanner is not None and not await self.scanner.setup():
-            logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            exit(1)
+            raise FatalError('Scanner setup failed', 1)
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
         await self.client.bounties.settle_all_bounties(chain)
@@ -252,28 +251,20 @@ class AbstractMicroengine(object):
         arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
 
         bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
-        # Check that microengine has sufficient balance to handle the assertion
-        balance = await self.client.balances.get_nct_balance(chain)
-        if balance < assertion_fee + sum(bid):
-            logger.critical('Insufficient balance to post assertion for bounty on %s. Have %s NCT. Need %s NCT',
-                            chain,
-                            balance,
-                            assertion_fee + sum(bid),
-                            extra={'extra': guid})
-            if self.testing > 0:
-                exit(1)
-
+        try:
+            await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid))
+        except LowBalanceError as e:
             await self.client.liveness_recorder.remove_waiting_task(guid)
+            if self.client.tx_error_fatal:
+                raise FatalError('Failed to assert on bounty due to low balance') from e
+
             return []
 
         logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
         nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain)
         await self.client.liveness_recorder.remove_waiting_task(guid)
         for a in assertions:
-            # Post metadata to IPFS and post ipfs_hash as metadata, if it exists
-            ipfs_hash = await self.client.bounties.post_metadata(combined_metadata, chain)
-            metadata = ipfs_hash if ipfs_hash is not None else combined_metadata
-            ra = RevealAssertion(guid, a['index'], nonce, verdicts, metadata)
+            ra = RevealAssertion(guid, a['index'], nonce, verdicts, combined_metadata)
             self.client.schedule(expiration, ra, chain)
 
             sb = SettleBounty(guid)

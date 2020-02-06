@@ -13,10 +13,10 @@ from typing import AsyncGenerator
 
 from polyswarmartifact import DecodeError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
-from polyswarmclient.exceptions import ApiKeyException, ExpiredException
+from polyswarmclient.exceptions import ApiKeyException, ExpiredException, FatalError
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
-from polyswarmclient.utils import asyncio_join, asyncio_stop, exit, MAX_WAIT, configure_event_loop
+from polyswarmclient.utils import asyncio_join, asyncio_stop, MAX_WAIT, configure_event_loop
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class Worker:
             except asyncio.CancelledError:
                 logger.info('Clean exit requested, exiting')
                 asyncio_join()
-                exit(0)
+                break
             except Exception:
                 logger.exception('Unhandled exception at top level')
                 asyncio_stop()
@@ -98,7 +98,7 @@ class Worker:
         await self.setup_redis(loop)
         if not await self.scanner.setup():
             logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            exit(1)
+            raise FatalError('Scanner setup failed', 1)
 
     def setup_semaphores(self, loop: asyncio.AbstractEventLoop):
         self.scan_semaphore = OptionalSemaphore(value=self.scan_limit, loop=loop)

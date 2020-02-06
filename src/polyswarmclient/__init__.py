@@ -1,29 +1,24 @@
 import aiohttp
 import asyncio
+import backoff
 import json
 import logging
 import os
 import time
 import websockets
 
-from polyswarmclient import events
-from polyswarmclient.bidstrategy import BidStrategyBase
-from polyswarmclient.balanceclient import BalanceClient
-from polyswarmclient.bountiesclient import BountiesClient
-from polyswarmclient.liveness.local import LocalLivenessRecorder
-from polyswarmclient.stakingclient import StakingClient
-from polyswarmclient.offersclient import OffersClient
-from polyswarmclient.relayclient import RelayClient
-from polyswarmclient.transaction import NonceManager
-from polyswarmclient.utils import asyncio_join, asyncio_stop, configure_event_loop, exit, MAX_WAIT, check_response, \
-    is_valid_ipfs_uri
+from web3.auto import w3
 
-from web3 import Web3
+from polyswarmclient import events
+from polyswarmclient import utils
+from polyswarmclient.bidstrategy import BidStrategyBase
+from polyswarmclient.ethereum.transaction import NonceManager
+from polyswarmclient.liveness.local import LocalLivenessRecorder
+
 
 logger = logging.getLogger(__name__)
-w3 = Web3()
 
-REQUEST_TIMEOUT = 300.0
+REQUEST_TIMEOUT = 5
 MAX_ARTIFACTS = 256
 RATE_LIMIT_SLEEP = 2.0
 
@@ -57,8 +52,8 @@ class Client(object):
         with open(keyfile, 'r') as f:
             self.priv_key = w3.eth.account.decrypt(f.read(), password)
 
-        self.account = w3.eth.account.privateKeyToAccount(self.priv_key).address
-        logger.info('Using account: %s', self.account)
+        self.account = w3.eth.account.from_key(self.priv_key)
+        logger.info('Using account: %s', self.account.address)
 
         self.__session = None
 
@@ -74,7 +69,7 @@ class Client(object):
         self.relay = None
         self.balances = None
 
-        # Setup a liveness instance
+        # Setup a liveliness instance
         self.liveness_recorder = LocalLivenessRecorder()
 
         # Events from client
@@ -96,7 +91,9 @@ class Client(object):
         self.on_vote_on_bounty_due = events.OnVoteOnBountyDueCallback()
         self.on_settle_bounty_due = events.OnSettleBountyDueCallback()
         self.on_withdraw_stake_due = events.OnWithdrawStakeDueCallback()
+        utils.configure_event_loop()
 
+    @backoff.on_exception(backoff.expo, Exception, max_time=utils.MAX_WAIT)
     def run(self, chains=None):
         """Run the main event loop
 
@@ -106,28 +103,18 @@ class Client(object):
         if chains is None:
             chains = {'home', 'side'}
 
-        configure_event_loop()
+        try:
+            asyncio.get_event_loop().run_until_complete(self.run_task(chains=chains))
+        except asyncio.CancelledError:
+            logger.info('Clean exit requested')
+            utils.asyncio_join()
+        except Exception:
+            logger.exception('Unhandled exception at top level')
+            utils.asyncio_stop()
+            utils.asyncio_join()
 
-        while True:
-
-            try:
-                asyncio.get_event_loop().run_until_complete(self.run_task(chains=chains))
-            except asyncio.CancelledError:
-                logger.info('Clean exit requested, exiting')
-
-                asyncio_join()
-                exit(0)
-            except Exception:
-                logger.exception('Unhandled exception at top level')
-                asyncio_stop()
-                asyncio_join()
-
-                self.tries += 1
-                wait = min(MAX_WAIT, self.tries * self.tries)
-
-                logger.critical('Detected unhandled exception, sleeping for %s seconds then resetting task', wait)
-                time.sleep(wait)
-                continue
+            logger.critical('Detected unhandled exception, resetting task')
+            raise
 
     async def run_task(self, chains=None, listen_for_events=True):
         """
@@ -136,30 +123,26 @@ class Client(object):
         Args:
             chains (set(str)): Set of chains to operate on. Defaults to {'home', 'side'}
         """
+        self.params = {'account': self.account.address}
         if chains is None:
             chains = {'home', 'side'}
 
         if self.api_key and not self.polyswarmd_uri.startswith('https://'):
             raise Exception('Refusing to send API key over insecure transport')
 
-        self.params = {'account': self.account}
-
+        self.__schedules = {chain: events.Schedule() for chain in chains}
         # We can now create our locks, because we are assured that the event loop is set
         self.nonce_managers = {chain: NonceManager(self, chain) for chain in chains}
-        self.__schedules = {chain: events.Schedule() for chain in chains}
-        await self.liveness_recorder.start()
+        for nonce_manager in self.nonce_managers.values():
+            await nonce_manager.setup()
+
         try:
-            # XXX: Set the timeouts here to reasonable values, probably should be configurable
+            await self.liveness_recorder.start()
             # No limits on connections
             conn = aiohttp.TCPConnector(limit=0, limit_per_host=0)
             timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
             async with aiohttp.ClientSession(connector=conn, timeout=timeout) as self.__session:
-                self.bounties = BountiesClient(self)
-                self.staking = StakingClient(self)
-                self.offers = OffersClient(self)
-                self.relay = RelayClient(self)
-                self.balances = BalanceClient(self)
-
+                self.create_sub_clients()
                 for chain in chains:
                     await self.bounties.fetch_parameters(chain)
                     await self.staking.fetch_parameters(chain)
@@ -171,17 +154,60 @@ class Client(object):
                     await asyncio.wait([self.listen_for_events(chain) for chain in chains])
         finally:
             self.__session = None
-            self.bounties = None
-            self.staking = None
-            self.offers = None
+            self.clear_sub_clients()
 
-    async def make_request(self, method, path, chain, json=None, send_nonce=False, api_key=None, tries=2, params=None):
+    def clear_sub_clients(self):
+        self.balances = None
+        self.bounties = None
+        self.offers = None
+        self.relay = None
+        self.staking = None
+
+    def create_sub_clients(self):
+        # Test polyswarmd, then either load etheruem or fast
+        try:
+            # Wallets only exists in polyswarmd-fast
+            with self.__session.options('/wallets/') as response:
+                response.raise_for_status()
+            self.create_fast_sub_clients()
+        except aiohttp.ClientResponseError:
+            logger.debug('Polyswarmd only support ethereum')
+            self.create_ethereum_sub_clients()
+
+    def create_ethereum_sub_clients(self):
+        from polyswarmclient.ethereum import BalanceClient,  BountiesClient, StakingClient, OffersClient, RelayClient
+        self.bounties = BountiesClient(self)
+        self.staking = StakingClient(self)
+        self.offers = OffersClient(self)
+        self.relay = RelayClient(self)
+        self.balances = BalanceClient(self)
+
+    def create_fast_sub_clients(self):
+        from polyswarmclient.fast import BalanceClient,  BountiesClient, StakingClient, OffersClient, RelayClient
+        self.bounties = BountiesClient(self)
+        self.staking = StakingClient(self)
+        self.offers = OffersClient(self)
+        self.relay = RelayClient(self)
+        self.balances = BalanceClient(self)
+
+        async def periodic():
+            while True:
+                number = int(time.time())
+                asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain='side'))
+                asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
+                asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain='side'))
+                await asyncio.sleep(1)
+
+        asyncio.get_event_loop().create_task(periodic())
+
+    async def make_request(self, method, path, chain, data=None, json=None, send_nonce=False, api_key=None, tries=2, params=None):
         """Make a request to polyswarmd, expecting a json response
 
         Args:
             method (str): HTTP method to use
             path (str): Path portion of URI to send request to
             chain (str): Which chain to operate on
+            data (Dict[str, Any]): Optional data dict to send with request
             json (obj): JSON payload to send with request
             send_nonce (bool): Whether to include a base_nonce query string parameter in this request
             api_key (str): Override default API key
@@ -191,7 +217,7 @@ class Client(object):
             (bool, obj): Tuple of boolean representing success, and response JSON parsed from polyswarmd
         """
         if chain != 'home' and chain != 'side':
-            raise ValueError('Chain parameter must be `home` or `side`, got {0}'.format(chain))
+            raise ValueError(f'Chain parameter must be `home` or `side`, got {chain}')
         if self.__session is None or self.__session.closed:
             raise Exception('Not running')
 
@@ -223,8 +249,8 @@ class Client(object):
 
             response = {}
             try:
-                async with self.__session.request(method, uri, params=params, headers=headers,
-                                                  json=json) as raw_response:
+                async with self.__session.request(method, uri, params=params, headers=headers, data=data, json=json)\
+                        as raw_response:
                     try:
                         # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
                         if raw_response.status == 429:
@@ -246,7 +272,7 @@ class Client(object):
 
             logger.debug('%s %s?%s', method, path, qs, extra={'extra': response})
 
-            if not check_response(response):
+            if not utils.check_response(response):
                 if tries > 0:
                     logger.info('Request %s %s?%s failed, retrying...', method, path, qs)
                     continue
@@ -257,46 +283,6 @@ class Client(object):
             return True, response.get('result')
 
         return False, response.get('errors')
-
-    def sign_transactions(self, transactions):
-        """Sign a set of transactions
-
-        Args:
-            transactions (List[Transaction]): The transactions to sign
-        Returns:
-            List[Transaction]: The signed transactions
-        """
-        return [w3.eth.account.signTransaction(tx, self.priv_key) for tx in transactions]
-
-    async def get_base_nonce(self, chain, ignore_pending=False, api_key=None):
-        """Get account's nonce from polyswarmd
-
-        Args:
-            chain (str): Which chain to operate on
-            ignore_pending (bool): Whether to include pending transactions in nonce or not
-            api_key (str): Override default API key
-        """
-        params = {'ignore_pending': ' '} if ignore_pending else None
-        success, base_nonce = await self.make_request('GET', '/nonce', chain, api_key=api_key, params=params)
-        if success:
-            return base_nonce
-        else:
-            logger.error('Failed to fetch base nonce')
-            return None
-
-    async def get_pending_nonces(self, chain, api_key=None):
-        """Get account's pending nonces from polyswarmd
-
-        Args:
-            chain (str): Which chain to operate on
-            api_key (str): Override default API key
-        """
-        success, nonces = await self.make_request('GET', '/pending', chain, api_key=api_key)
-        if success:
-            return [int(nonce) for nonce in nonces]
-        else:
-            logger.error('Failed to fetch base nonce')
-            return []
 
     async def list_artifacts(self, ipfs_uri, api_key=None, tries=2):
         """Return a list of artificats from a given ipfs_uri.
@@ -309,7 +295,7 @@ class Client(object):
             List[(str, str)]: A list of tuples. First tuple element is the artifact name, second tuple element
             is the artifact hash.
         """
-        if not is_valid_ipfs_uri(ipfs_uri):
+        if not utils.is_valid_ipfs_uri(ipfs_uri):
             logger.warning('Invalid IPFS URI: %s', ipfs_uri)
             return []
 
@@ -346,7 +332,7 @@ class Client(object):
         Returns:
             (bytes): Content of the artifact
         """
-        if not is_valid_ipfs_uri(ipfs_uri):
+        if not utils.is_valid_ipfs_uri(ipfs_uri):
             raise ValueError('Invalid IPFS URI')
 
         uri = f'{self.polyswarmd_uri}/artifacts/{ipfs_uri}/{index}'
@@ -388,14 +374,6 @@ class Client(object):
     def from_wei(amount, unit='ether'):
         return w3.fromWei(amount, unit)
 
-    @staticmethod
-    def get_artifact_bid_at_(mask, bid, index):
-        if not mask[index]:
-            return 0
-
-        bid_index = sum(mask[:index])
-        return bid[bid_index]
-
     # Async iterator helper class
     class __GetArtifacts(object):
         def __init__(self, client, ipfs_uri, api_key=None):
@@ -408,7 +386,7 @@ class Client(object):
             return self
 
         async def __anext__(self):
-            if not is_valid_ipfs_uri(self.ipfs_uri):
+            if not utils.is_valid_ipfs_uri(self.ipfs_uri):
                 raise StopAsyncIteration
 
             i = self.i
@@ -513,7 +491,7 @@ class Client(object):
 
                 logger.debug('POST/artifacts', extra={'extra': response})
 
-                if not check_response(response):
+                if not utils.check_response(response):
                     if tries > 0:
                         logger.info('Posting artifacts to polyswarmd failed, retrying')
                         continue
@@ -532,7 +510,7 @@ class Client(object):
             chain (str): Which chain to operate on
         """
         if chain != 'home' and chain != 'side':
-            raise ValueError('Chain parameter must be `home` or `side`, got {0}'.format(chain))
+            raise ValueError(f'Chain parameter must be `home` or `side`, got {chain}')
         self.__schedules[chain].put(expiration, event)
 
     async def __handle_scheduled_events(self, number, chain):
@@ -543,7 +521,7 @@ class Client(object):
             chain (str): Which chain to operate on
         """
         if chain != 'home' and chain != 'side':
-            raise ValueError('Chain parameter must be `home` or `side`, got {0}'.format(chain))
+            raise ValueError('Chain parameter must be `home` or `side`, got {chain}')
         while self.__schedules[chain].peek() and self.__schedules[chain].peek()[0] < number:
             exp, task = self.__schedules[chain].get()
             if isinstance(task, events.RevealAssertion):
@@ -561,111 +539,105 @@ class Client(object):
                 asyncio.get_event_loop().create_task(
                     self.on_withdraw_stake_due.run(amount=task.amount, chain=chain))
 
+    @backoff.on_exception(backoff.expo, (websockets.exceptions.ConnectionClosed, OSError, asyncio.TimeoutError,
+                                         websockets.exceptions.InvalidHandshake), max_time=utils.MAX_WAIT)
     async def listen_for_events(self, chain):
         """Listen for events via websocket connection to polyswarmd
         Args:
             chain (str): Which chain to operate on
         """
         if chain != 'home' and chain != 'side':
-            raise ValueError('Chain parameter must be `home` or `side`, got {0}'.format(chain))
+            raise ValueError(f'Chain parameter must be `home` or `side`, got {chain}')
         if not self.polyswarmd_uri.startswith('http'):
-            raise ValueError('polyswarmd_uri protocol is not http or https, got {0}'.format(self.polyswarmd_uri))
+            raise ValueError(f'polyswarmd_uri protocol is not http or https, got {self.polyswarmd_uri}')
 
         # http:// -> ws://, https:// -> wss://
         wsuri = f'{self.polyswarmd_uri.replace("http", "ws", 1)}/events?chain={chain}'
         last_block = 0
-        retry = 0
-        while True:
-            try:
-                async with websockets.connect(wsuri) as ws:
-                    # Fetch parameters again here so we don't miss update events
-                    await self.bounties.fetch_parameters(chain)
-                    await self.staking.fetch_parameters(chain)
+        try:
+            async with websockets.connect(wsuri) as ws:
+                # Fetch parameters again here so we don't miss update events
+                await self.bounties.fetch_parameters(chain)
+                await self.staking.fetch_parameters(chain)
 
-                    if retry != 0:
-                        logger.error('Websocket connection to polyswarmd reestablished')
-                        retry = 0
+                logger.error('Websocket connection to polyswarmd established')
 
-                    while not ws.closed:
-                        resp = None
-                        try:
-                            resp = await ws.recv()
-                            resp = json.loads(resp)
-                            event = resp.get('event')
-                            data = resp.get('data')
-                            block_number = resp.get('block_number')
-                            txhash = resp.get('txhash')
-                        except json.JSONDecodeError:
-                            logger.error('Invalid event response from polyswarmd: %s', resp)
+                while not ws.closed:
+                    resp = None
+                    try:
+                        resp = await ws.recv()
+                        resp = json.loads(resp)
+                        event = resp.get('event')
+                        data = resp.get('data')
+                        block_number = resp.get('block_number')
+                        txhash = resp.get('txhash')
+                    except json.JSONDecodeError:
+                        logger.error('Invalid event response from polyswarmd: %s', resp)
+                        continue
+
+                    if event != 'block':
+                        logger.info('Received %s on chain %s', event, chain, extra={'extra': data})
+
+                    if event == 'connected':
+                        logger.info('Connected to event socket at: %s', data.get('start_time'))
+                    elif event == 'block':
+                        number = data.get('number', 0)
+
+                        if number <= last_block:
                             continue
-                        except websockets.exceptions.ConnectionClosed:
-                            # Trigger retry logic outside main loop
-                            break
 
-                        if event != 'block':
-                            logger.info('Received %s on chain %s', event, chain, extra={'extra': data})
+                        if number % 100 == 0:
+                            logger.debug('Block %s on chain %s', number, chain)
 
-                        if event == 'connected':
-                            logger.info('Connected to event socket at: %s', data.get('start_time'))
-                        elif event == 'block':
-                            number = data.get('number', 0)
-
-                            if number <= last_block:
-                                continue
-
-                            if number % 100 == 0:
-                                logger.debug('Block %s on chain %s', number, chain)
-
-                            asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain=chain))
-                            asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain=chain))
-                            asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
-                        elif event == 'fee_update':
-                            d = {'bounty_fee': data.get('bounty_fee'), 'assertion_fee': data.get('assertion_fee')}
-                            await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
-                        elif event == 'window_update':
-                            d = {'assertion_reveal_window': data.get('assertion_reveal_window'),
-                                 'arbiter_vote_window': data.get('arbiter_vote_window')}
-                            await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
-                        elif event == 'bounty':
-                            asyncio.get_event_loop().create_task(
-                                self.on_new_bounty.run(**data, block_number=block_number, txhash=txhash, chain=chain))
-                        elif event == 'assertion':
-                            asyncio.get_event_loop().create_task(
-                                self.on_new_assertion.run(**data, block_number=block_number, txhash=txhash,
-                                                          chain=chain))
-                        elif event == 'reveal':
-                            asyncio.get_event_loop().create_task(
-                                self.on_reveal_assertion.run(**data, block_number=block_number, txhash=txhash,
-                                                             chain=chain))
-                        elif event == 'vote':
-                            asyncio.get_event_loop().create_task(
-                                self.on_new_vote.run(**data, block_number=block_number, txhash=txhash, chain=chain))
-                        elif event == 'quorum':
-                            asyncio.get_event_loop().create_task(
-                                self.on_quorum_reached.run(**data, block_number=block_number, txhash=txhash,
-                                                           chain=chain))
-                        elif event == 'settled_bounty':
-                            asyncio.get_event_loop().create_task(
-                                self.on_settled_bounty.run(**data, block_number=block_number, txhash=txhash,
-                                                           chain=chain))
-                        elif event == 'deprecated':
-                            asyncio.get_event_loop().create_task(
-                                self.on_deprecated.run(**data, block_number=block_number, txhash=txhash,
+                        asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain=chain))
+                        # These are staying here because we need the homechain block events as well
+                        asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain=chain))
+                        asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
+                    elif event == 'fee_update':
+                        d = {'bounty_fee': data.get('bounty_fee'), 'assertion_fee': data.get('assertion_fee')}
+                        await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
+                    elif event == 'window_update':
+                        d = {'assertion_reveal_window': data.get('assertion_reveal_window'),
+                             'arbiter_vote_window': data.get('arbiter_vote_window')}
+                        await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
+                    elif event == 'bounty':
+                        asyncio.get_event_loop().create_task(
+                            self.on_new_bounty.run(**data, block_number=block_number, txhash=txhash, chain=chain))
+                    elif event == 'assertion':
+                        asyncio.get_event_loop().create_task(
+                            self.on_new_assertion.run(**data, block_number=block_number, txhash=txhash,
+                                                      chain=chain))
+                    elif event == 'reveal':
+                        asyncio.get_event_loop().create_task(
+                            self.on_reveal_assertion.run(**data, block_number=block_number, txhash=txhash,
+                                                         chain=chain))
+                    elif event == 'vote':
+                        asyncio.get_event_loop().create_task(
+                            self.on_new_vote.run(**data, block_number=block_number, txhash=txhash, chain=chain))
+                    elif event == 'quorum':
+                        asyncio.get_event_loop().create_task(
+                            self.on_quorum_reached.run(**data, block_number=block_number, txhash=txhash,
                                                        chain=chain))
+                    elif event == 'settled_bounty':
+                        asyncio.get_event_loop().create_task(
+                            self.on_settled_bounty.run(**data, block_number=block_number, txhash=txhash,
+                                                       chain=chain))
+                    elif event == 'deprecated':
+                        asyncio.get_event_loop().create_task(
+                            self.on_deprecated.run(**data, block_number=block_number, txhash=txhash,
+                                                   chain=chain))
 
-                        elif event == 'initialized_channel':
-                            asyncio.get_event_loop().create_task(
-                                self.on_initialized_channel.run(**data, block_number=block_number, txhash=txhash))
-                        else:
-                            logger.error('Invalid event type from polyswarmd: %s', resp)
-
-            except (OSError, websockets.exceptions.InvalidHandshake):
-                logger.error('Websocket connection to polyswarmd refused, retrying')
-            except asyncio.TimeoutError:
-                logger.error('Websocket connection to polyswarmd timed out, retrying')
-
-            retry += 1
-            wait = min(MAX_WAIT, retry * retry)
-
-            logger.error('Websocket connection to polyswarmd closed, sleeping for %s seconds then reconnecting', wait)
-            await asyncio.sleep(wait)
+                    elif event == 'initialized_channel':
+                        asyncio.get_event_loop().create_task(
+                            self.on_initialized_channel.run(**data, block_number=block_number, txhash=txhash))
+                    else:
+                        logger.error('Invalid event type from polyswarmd: %s', resp)
+        except websockets.exceptions.ConnectionClosed:
+            logger.error('Websocket connection to polyswarmd closed, retrying')
+            raise
+        except (OSError, websockets.exceptions.InvalidHandshake):
+            logger.error('Websocket connection to polyswarmd refused, retrying')
+            raise
+        except asyncio.TimeoutError:
+            logger.error('Websocket connection to polyswarmd timed out, retrying')
+            raise

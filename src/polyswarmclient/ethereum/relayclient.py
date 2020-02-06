@@ -1,12 +1,12 @@
 import logging
 
-from polyswarmclient.verifiers import NctTransferVerifier
-from polyswarmclient.transaction import AbstractTransaction
+from polyswarmclient.ethereum.verifiers import NctTransferVerifier
+from polyswarmclient.ethereum.transaction import EthereumTransaction
 
 logger = logging.getLogger(__name__)  # Initialize logger
 
 
-class RelayDepositTransaction(AbstractTransaction):
+class RelayDepositTransaction(EthereumTransaction):
     def __init__(self, client, amount):
         self.amount = amount
         transfer = NctTransferVerifier(amount)
@@ -30,7 +30,7 @@ class RelayDepositTransaction(AbstractTransaction):
         return False
 
 
-class RelayWithdrawTransaction(AbstractTransaction):
+class RelayWithdrawTransaction(EthereumTransaction):
     def __init__(self, client, amount):
         self.amount = amount
         transfer = NctTransferVerifier(amount)

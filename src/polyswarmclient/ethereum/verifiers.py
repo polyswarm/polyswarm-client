@@ -1,7 +1,7 @@
 import logging
 from abc import ABCMeta, abstractmethod
 
-from eth_abi import decode_abi
+from eth_abi import decode_abi, encode_abi
 from eth_abi.exceptions import InsufficientDataBytes
 from hexbytes import HexBytes
 from polyswarmartifact import ArtifactType

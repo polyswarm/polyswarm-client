@@ -1,8 +1,10 @@
 import asyncio
 import logging
-from abc import ABCMeta, abstractmethod
 
-from polyswarmclient.utils import exit
+from abc import ABCMeta, abstractmethod
+from web3.auto import w3
+
+from polyswarmclient.exceptions import FatalError
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,13 @@ class NonceManager:
         self.chain = chain
         self.needs_update = True
         self.overset = False
+        self.nonce_lock = None
+        self.update_lock = None
+        self.pending = []
+
+    async def setup(self):
         self.nonce_lock = asyncio.Lock()
         self.update_lock = asyncio.Lock()
-        self.pending = []
 
     async def acquire(self):
         """Acquires the nonce lock and updates base_nonce if needs_update is set"""
@@ -73,7 +79,7 @@ class NonceManager:
         """
         low_nonce = await self.get_nonce(True)
         nonce = max(self.base_nonce, low_nonce) if not overset else low_nonce
-        pending = sorted(await self.client.get_pending_nonces(self.chain))
+        pending = sorted(await self.get_pending_nonces(self.chain))
         self.pending = pending
         # -1 because nonces are zero indexed, so nonce + amount -1 is max nonce
         if not pending or nonce + amount - 1 < pending[0]:
@@ -110,6 +116,36 @@ class NonceManager:
         # Only check through the end of the waitlist if results exceed it
         return [r for r in range(nonces[0], nonces[-1]) if r not in nonces]
 
+    async def get_base_nonce(self, chain, ignore_pending=False, api_key=None):
+        """Get account's nonce from polyswarmd
+
+        Args:
+            chain (str): Which chain to operate on
+            ignore_pending (bool): Whether to include pending transactions in nonce or not
+            api_key (str): Override default API key
+        """
+        params = {'ignore_pending': ' '} if ignore_pending else None
+        success, base_nonce = await self.client.make_request('GET', '/nonce', chain, api_key=api_key, params=params)
+        if success:
+            return base_nonce
+        else:
+            logger.error('Failed to fetch base nonce')
+            return None
+
+    async def get_pending_nonces(self, chain, api_key=None):
+        """Get account's pending nonces from polyswarmd
+
+        Args:
+            chain (str): Which chain to operate on
+            api_key (str): Override default API key
+        """
+        success, nonces = await self.client.make_request('GET', '/pending', chain, api_key=api_key)
+        if success:
+            return [int(nonce) for nonce in nonces]
+        else:
+            logger.error('Failed to fetch base nonce')
+            return []
+
     async def get_nonce(self, ignore_pending):
         """Get nonce from polswarmd
 
@@ -121,7 +157,7 @@ class NonceManager:
 
         """
         while True:
-            nonce = await self.client.get_base_nonce(self.chain, ignore_pending)
+            nonce = await self.get_base_nonce(self.chain, ignore_pending)
             if nonce is not None:
                 break
 
@@ -159,7 +195,8 @@ class NonceManager:
         self.nonce_lock.release()
 
 
-class AbstractTransaction(metaclass=ABCMeta):
+# FIXME This needs to change to building transaction itself from the addresses before we can go live
+class EthereumTransaction(metaclass=ABCMeta):
     """Used to verify and post groups of transactions that make up a specific action.
 
     For instance, when approving some funds to move, and calling a contract function that will consumer them.
@@ -212,7 +249,7 @@ class AbstractTransaction(metaclass=ABCMeta):
                             extra={'extra': transactions})
             if self.client.tx_error_fatal:
                 logger.critical(LOG_MSG_ENGINE_TOO_SLOW)
-                exit(1)
+                raise FatalError('Transaction error in testing mode', 1)
             return False, {}
 
         # Keep around any extra data from the first request, such as nonce for assertion
@@ -224,7 +261,8 @@ class AbstractTransaction(metaclass=ABCMeta):
         get_errors = []
         while tries > 0:
             # Step 2: Update nonces, sign then post transactions
-            txhashes, nonces, post_errors = await self.__sign_and_post_transactions(transactions, orig_tries, chain, api_key)
+            txhashes, nonces, post_errors = await self.__sign_and_post_transactions(transactions, orig_tries, chain,
+                                                                                    api_key)
             if not txhashes:
                 return False, {'errors': post_errors}
 
@@ -262,7 +300,7 @@ class AbstractTransaction(metaclass=ABCMeta):
             for i, transaction in enumerate(transactions):
                 transaction['nonce'] = nonces[i]
 
-            signed_txs = self.client.sign_transactions(transactions)
+            signed_txs = self.__sign_transactions(transactions)
             raw_signed_txs = [bytes(tx['rawTransaction']).hex() for tx in signed_txs
                               if tx.get('rawTransaction', None) is not None]
 
@@ -279,7 +317,7 @@ class AbstractTransaction(metaclass=ABCMeta):
                 if self.client.tx_error_fatal:
                     logger.critical('Received fatal transaction error during post.', extra={'extra': results})
                     logger.critical(LOG_MSG_ENGINE_TOO_SLOW)
-                    exit(1)
+                    raise FatalError('Transaction error in testing mode', 1)
                 elif not all_known_tx_errors:
                     logger.error('Received transaction error during post',
                                  extra={'extra': {'results': results, 'transactions': transactions}})
@@ -320,6 +358,16 @@ class AbstractTransaction(metaclass=ABCMeta):
 
         return txhashes, nonces, errors
 
+    def __sign_transactions(self, transactions):
+        """Sign a set of transactions
+
+        Args:
+            transactions (List[Transaction]): The transactions to sign
+        Returns:
+            List[Transaction]: The signed transactions
+        """
+        return [w3.eth.account.signTransaction(tx, self.client.priv_key) for tx in transactions]
+
     async def __get_transactions(self, txhashes, nonces, tries, chain, api_key):
         """Get generated events or errors from receipts for a set of txhashes
 
@@ -348,7 +396,7 @@ class AbstractTransaction(metaclass=ABCMeta):
             if not success:
                 if self.client.tx_error_fatal:
                     logger.critical('Received fatal transaction error during get.', extra={'extra': results})
-                    exit(1)
+                    raise FatalError('Transaction error in testing mode', 1)
                 else:
                     logger.error('Received transaction error during get', extra={'extra': results})
 

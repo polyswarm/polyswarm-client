@@ -25,6 +25,7 @@ class ExtraTextFormatter(logging.Formatter):
 
         return super().format(record)
 
+
 class JSONFormatter(jsonlogger.JsonFormatter):
     """
     Class to add custom JSON fields to our logger.

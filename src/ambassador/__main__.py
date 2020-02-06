@@ -1,9 +1,9 @@
 import click
 import importlib.util
 import logging
-import sys
 
 from polyswarmclient.config import init_logging
+from polyswarmclient.exceptions import FatalError
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
     clientlevel = getattr(logging, client_log.upper(), None)
     if not isinstance(loglevel, int) or not isinstance(clientlevel, int):
         logging.error('invalid log level')
-        sys.exit(-1)
+        raise FatalError('Invalid log level', 1)
 
     logger_name, ambassador_class = choose_backend(backend)
 

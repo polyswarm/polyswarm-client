@@ -173,7 +173,7 @@ class MockClient(Client):
         if params is None:
             params = {}
 
-        params.update({'account': self.account})
+        params.update({'account': self.account.address})
 
         if chain is not None:
             params['chain'] = chain

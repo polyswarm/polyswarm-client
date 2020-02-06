@@ -19,7 +19,8 @@ class RedisDailyRateLimit(AbstractRateLimit):
         self.queue = queue
         self.limit = limit if limit is None else int(limit)
 
-    def get_daily_key(self):
+    @property
+    def daily_key(self):
         date = datetime.date.today().strftime('%Y-%m-%d')
         return f'{self.queue}:{date}'
 
@@ -37,7 +38,7 @@ class RedisDailyRateLimit(AbstractRateLimit):
         if self.limit is None:
             return True
 
-        key = self.get_daily_key()
+        key = self.daily_key
         try:
             value = await self.redis.incr(key)
             if value == 1:

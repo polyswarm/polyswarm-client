@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 
 from polyswarmclient import Client
 from polyswarmclient.events import SettleBounty
-from polyswarmclient.exceptions import LowBalanceError
-from polyswarmclient.utils import asyncio_stop, exit
+from polyswarmclient.exceptions import LowBalanceError, FatalError
+from polyswarmclient.utils import asyncio_stop
 
 logger = logging.getLogger(__name__)  # Initialize logger
 
@@ -199,16 +199,15 @@ class AbstractAmbassador(ABC):
         """
         bounty_fee = await self.client.bounties.parameters[chain].get('bounty_fee')
         try:
-            await self.client.balances.raise_low_balance(bounty.amount + bounty_fee, chain)
-        except LowBalanceError:
+            await self.client.balances.raise_for_low_balance(bounty.amount + bounty_fee, chain)
+        except LowBalanceError as e:
             await self.client.liveness_recorder.remove_waiting_task(bounty.ipfs_uri)
             await self.on_bounty_post_failed(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration,
                                              chain, metadata=bounty.metadata)
             self.bounty_queues[chain].task_done()
             self.bounty_semaphores[chain].release()
             if self.client.tx_error_fatal:
-                logger.error('Failed to post bounty due to low balance. Exiting')
-                exit(1)
+                raise FatalError('Failed to post bounty due to low balance') from e
 
         assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
         arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
@@ -326,7 +325,7 @@ class AbstractAmbassador(ABC):
             bounties_posted = self.bounties_posted.get(chain, 0)
             last_bounty_count = self.last_bounty_count.get(chain, 0)
             if blocks % self.watchdog == 0 and bounties_posted == last_bounty_count:
-                raise Exception('Bounties not processing, exiting with failure')
+                raise FatalError('Bounties not processing')
 
             self.last_bounty_count[chain] = bounties_posted
 

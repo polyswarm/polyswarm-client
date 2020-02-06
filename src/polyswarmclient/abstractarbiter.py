@@ -1,11 +1,13 @@
 import asyncio
 import logging
 
+import backoff
 from polyswarmartifact import ArtifactType, DecodeError
 
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.events import VoteOnBounty, SettleBounty, WithdrawStake
+from polyswarmclient.exceptions import LowBalanceError, FatalError
 from polyswarmclient.utils import asyncio_stop
 
 logger = logging.getLogger(__name__)  # Initialize logger
@@ -123,29 +125,19 @@ class AbstractArbiter(object):
 
         min_stake = await self.client.staking.parameters[chain].get('minimum_stake')
         staking_balance = await self.client.staking.get_total_balance(chain)
-        tries = 0
         if staking_balance < min_stake:
-            while True:
-                nct_balance = await self.client.balances.get_nct_balance(chain)
-                if self.testing > 0 and nct_balance < min_stake - staking_balance and tries >= MAX_STAKE_RETRIES:
-                    logger.error('Failed %s attempts to deposit due to low balance. Exiting', tries)
-                    exit(1)
-                elif nct_balance < min_stake - staking_balance:
-                    logger.critical('Insufficient balance to deposit stake on %s. Have %s NCT. Need %s NCT',
-                                    chain,
-                                    nct_balance,
-                                    min_stake - staking_balance)
-                    tries += 1
-                    await asyncio.sleep(tries * tries)
-                    continue
-
-                deposits = await self.client.staking.post_deposit(min_stake - staking_balance, chain)
-                logger.info('Depositing stake: %s', deposits)
-                break
+            try:
+                await self.deposit_stake(min_stake - staking_balance, chain)
+            except LowBalanceError as e:
+                raise FatalError(f'Failed to stake {min_stake - staking_balance} nct due to low balance', 1) from e
 
         if self.scanner is not None and not await self.scanner.setup():
-            logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            exit(1)
+            raise FatalError('Scanner setup failed', 1)
+
+    async def deposit_stake(self, nct, chain):
+        self.client.balances.raise_for_low_balance(nct, chain)
+        deposits = await self.client.staking.post_deposit(nct, chain)
+        logger.info('Depositing stake: %s', deposits)
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
         """Schedule Withdraw stake for when the last settles are due

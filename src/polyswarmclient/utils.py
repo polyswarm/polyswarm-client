@@ -4,7 +4,8 @@ import os
 import sys
 import uuid
 
-from Crypto.Hash import keccak
+from hexbytes import HexBytes
+from web3 import Web3
 from concurrent.futures import ThreadPoolExecutor
 
 import base58
@@ -15,7 +16,8 @@ TASK_TIMEOUT = 1.0
 MAX_WAIT = int(os.getenv('WORKER_BACKOFF', '15'))
 MAX_WORKERS = 4
 
-def to_string(value):
+
+def to_bytes(value):
     if isinstance(value, bytes):
         return value
     if isinstance(value, str):
@@ -23,15 +25,15 @@ def to_string(value):
     if isinstance(value, int):
         return bytes(str(value), 'utf-8')
 
-def sha3_256(x):
-    return keccak.new(digest_bits=256, data=x).digest()
 
 def sha3(seed):
-    return sha3_256(to_string(seed))
+    return Web3.keccak(to_bytes(seed))
+
 
 def int_to_bytes(i):
     h = hex(i)[2:]
     return bytes.fromhex('0' * (64 - len(h)) + h)
+
 
 def int_from_bytes(b):
     return int.from_bytes(b, byteorder='big')
@@ -96,15 +98,6 @@ def asyncio_stop():
 
     for task in pending:
         task.cancel()
-
-
-def exit(exit_status):
-    """Exit the program entirely."""
-    if sys.platform == 'win32':
-        # XXX: v. hacky. We need to find out what is hanging sys.exit()
-        os._exit(exit_status)
-    else:
-        sys.exit(exit_status)
 
 
 def check_response(response):

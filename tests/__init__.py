@@ -28,4 +28,4 @@ def random_bitset():
 
 
 def random_ipfs_uri():
-    return base58.b58encode(b'\x12' + os.urandom(32))
+    return base58.b58encode(b'\x12' + os.urandom(32)).decode('utf-8')

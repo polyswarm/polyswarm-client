@@ -1,3 +1,5 @@
+from click import ClickException
+
 
 class PolyswarmClientException(Exception):
     """
@@ -33,3 +35,9 @@ class LowBalanceError(PolyswarmClientException):
     Not enough NCT to complete the requested action
     """
     pass
+
+
+class FatalError(ClickException):
+    def __init__(self, message='', exit_code=0):
+        super().__init__(message)
+        self.exit_code = exit_code

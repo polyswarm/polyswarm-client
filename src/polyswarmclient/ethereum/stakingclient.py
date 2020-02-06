@@ -1,14 +1,14 @@
 import logging
 
 from polyswarmclient.parameters import Parameters
-from polyswarmclient.verifiers import StakingDepositVerifier, StakingWithdrawVerifier, \
+from polyswarmclient.ethereum.verifiers import StakingDepositVerifier, StakingWithdrawVerifier, \
     NctApproveVerifier
-from polyswarmclient.transaction import AbstractTransaction
+from polyswarmclient.ethereum.transaction import EthereumTransaction
 
 logger = logging.getLogger(__name__)
 
 
-class StakeDepositTransaction(AbstractTransaction):
+class StakeDepositTransaction(EthereumTransaction):
     def __init__(self, client, amount):
         self.amount = amount
         approve = NctApproveVerifier(amount)
@@ -32,7 +32,7 @@ class StakeDepositTransaction(AbstractTransaction):
         return False
 
 
-class StakeWithdrawTransaction(AbstractTransaction):
+class StakeWithdrawTransaction(EthereumTransaction):
     def __init__(self, client, amount):
         self.amount = amount
         withdraw = StakingWithdrawVerifier(amount)
@@ -84,7 +84,7 @@ class StakingClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing staking balance
         """
-        path = '/balances/{0}/staking/total'.format(self.__client.account)
+        path = '/balances/{0}/staking/total'.format(self.__client.account.address)
         success, result = await self.__client.make_request('GET', path, chain, api_key=api_key)
         return int(result)
 
@@ -97,7 +97,7 @@ class StakingClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing staking balance
         """
-        path = '/balances/{0}/staking/withdrawable'.format(self.__client.account)
+        path = '/balances/{0}/staking/withdrawable'.format(self.__client.account.address)
         success, result = await self.__client.make_request('GET', path, chain, api_key=api_key)
         return int(result)
 

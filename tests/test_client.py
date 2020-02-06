@@ -5,11 +5,9 @@ from polyswarmartifact import ArtifactType
 import polyswarmclient
 import random
 import uuid
-from os import urandom
 
 from unittest.mock import patch
 
-import polyswarmclient.transaction
 import polyswarmclient.utils
 from . import success, event, random_address, random_bitset, random_ipfs_uri
 
@@ -48,7 +46,8 @@ async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='home'), body=success(42))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='home'), body=success([]))
 
-    home = polyswarmclient.transaction.NonceManager(mock_client, 'home')
+    home = polyswarmclient.ethereum.transaction.NonceManager(mock_client, 'home')
+    await home.setup()
     await home.reserve(1)
 
     assert home.base_nonce == 43
@@ -56,7 +55,8 @@ async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='side'), body=success(1336))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='side'), body=success([]))
 
-    side = polyswarmclient.transaction.NonceManager(mock_client, 'side')
+    side = polyswarmclient.ethereum.transaction.NonceManager(mock_client, 'side')
+    await side.setup()
     await side.reserve(1)
 
     assert side.base_nonce == 1337
@@ -385,15 +385,3 @@ async def test_on_initialized_channel(mock_client):
     await mock_client.home_ws_mock.send(event('initialized_channel', initialized_channel))
 
     await done.wait()
-
-
-@pytest.mark.asyncio
-async def test_bid_and_mask_to_bid():
-    # arrange
-    mask = [False] * 128 + [True] + [False] * 127
-    bid = [.5 * 10 ** 18]
-    # act
-    # assert
-    assert polyswarmclient.Client.get_artifact_bid_at_(mask, bid, 128) == .5 * 10 ** 18
-    assert polyswarmclient.Client.get_artifact_bid_at_(mask, bid, 127) == 0
-    assert polyswarmclient.Client.get_artifact_bid_at_(mask, bid, 129) == 0
