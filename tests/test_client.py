@@ -46,7 +46,7 @@ async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='home'), body=success(42))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='home'), body=success([]))
 
-    home = polyswarmclient.ethereum.transaction.NonceManager(mock_client, 'home')
+    home = mock_client.nonce_managers['home']
     await home.setup()
     await home.reserve(1)
 
@@ -55,7 +55,7 @@ async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='side'), body=success(1336))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='side'), body=success([]))
 
-    side = polyswarmclient.ethereum.transaction.NonceManager(mock_client, 'side')
+    side = mock_client.nonce_managers['side']
     await side.setup()
     await side.reserve(1)
 
@@ -73,7 +73,7 @@ async def test_list_artifacts(mock_client):
         {'hash': 'QmYCvbfNbCwFR45HiNP45rwJgvatpiW38D961L5qAhUM5Y', 'name': 'contact'},
     ]
 
-    mock_client.http_mock.get(mock_client.url_with_parameters('/artifacts/{0}'.format(valid_ipfs_uri), chain='side'),
+    mock_client.http_mock.get(mock_client.url_with_parameters('/artifacts/{0}/'.format(valid_ipfs_uri), chain='side'),
                               body=success(valid_response))
     assert await mock_client.list_artifacts(valid_ipfs_uri) == [(x['name'], x['hash']) for x in valid_response]
 

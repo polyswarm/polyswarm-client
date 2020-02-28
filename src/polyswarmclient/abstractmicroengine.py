@@ -8,7 +8,7 @@ from polyswarmartifact.schema import verdict
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.events import RevealAssertion, SettleBounty
-from polyswarmclient.exceptions import InvalidBidError, FatalError, LowBalanceError
+from polyswarmclient.exceptions import InvalidBidError, FatalError, LowBalanceError, InvalidMetadataError
 from polyswarmclient.filters.bountyfilter import BountyFilter
 from polyswarmclient.filters.confidencefilter import ConfidenceModifier
 from polyswarmclient.filters.filter import MetadataFilter
@@ -252,7 +252,7 @@ class AbstractMicroengine(object):
 
         bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
         try:
-            await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid))
+            await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid), chain)
         except LowBalanceError as e:
             await self.client.liveness_recorder.remove_waiting_task(guid)
             if self.client.tx_error_fatal:
@@ -261,7 +261,13 @@ class AbstractMicroengine(object):
             return []
 
         logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
-        nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain)
+        try:
+            nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain,
+                                                                          metadata=combined_metadata)
+        except InvalidMetadataError:
+            logger.exception('Received invalid metadata')
+            return []
+
         await self.client.liveness_recorder.remove_waiting_task(guid)
         for a in assertions:
             ra = RevealAssertion(guid, a['index'], nonce, verdicts, combined_metadata)

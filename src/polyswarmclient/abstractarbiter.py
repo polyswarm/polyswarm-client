@@ -214,12 +214,6 @@ class AbstractArbiter(object):
         results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
         votes = [result.verdict for result in results]
 
-        bounty = await self.client.bounties.get_bounty(guid, chain)
-        if bounty is None:
-            logger.error('Unable to get retrieve new bounty')
-            await self.client.liveness_recorder.remove_waiting_task(guid)
-            return []
-
         bloom_parts = await self.client.bounties.get_bloom(guid, chain)
         bounty_bloom = 0
         for b in bloom_parts:

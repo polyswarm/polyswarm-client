@@ -204,7 +204,7 @@ class Worker:
             raise ApiKeyException()
 
         headers = {'Authorization': self.api_key} if self.api_key is not None else None
-        uri = f'{job.polyswarmd_uri}/artifacts/{job.uri}/{job.index}'
+        uri = f'{job.polyswarmd_uri}/artifacts/{job.uri}/{job.index}/'
         async with self.download_semaphore:
             response = await session.get(uri, headers=headers)
             response.raise_for_status()

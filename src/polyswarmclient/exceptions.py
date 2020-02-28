@@ -37,6 +37,19 @@ class LowBalanceError(PolyswarmClientException):
     pass
 
 
+class TransactionError(PolyswarmClientException):
+    """
+    A transaction failed
+    """
+    pass
+
+
+class InvalidMetadataError(PolyswarmClientException):
+    """
+    Metadata does not match the valid schema
+    """
+
+
 class FatalError(ClickException):
     def __init__(self, message='', exit_code=0):
         super().__init__(message)

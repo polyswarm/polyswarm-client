@@ -15,7 +15,7 @@ def failure(errors):
 
 
 def event(event, data, block_number=0, txhash='0x0'):
-    return json.dumps({'event': event, 'data': data, 'block_number': block_number, txhash: txhash})
+    return json.dumps({'event': event, 'data': data, 'block_number': block_number, 'txhash': txhash})
 
 
 def random_address():

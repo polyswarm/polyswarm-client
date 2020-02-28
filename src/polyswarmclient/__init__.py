@@ -93,7 +93,7 @@ class Client(object):
         self.on_withdraw_stake_due = events.OnWithdrawStakeDueCallback()
         utils.configure_event_loop()
 
-    @backoff.on_exception(backoff.expo, Exception, max_time=utils.MAX_WAIT)
+    @backoff.on_exception(backoff.expo, Exception)
     def run(self, chains=None):
         """Run the main event loop
 
@@ -112,9 +112,6 @@ class Client(object):
             logger.exception('Unhandled exception at top level')
             utils.asyncio_stop()
             utils.asyncio_join()
-
-            logger.critical('Detected unhandled exception, resetting task')
-            raise
 
     async def run_task(self, chains=None, listen_for_events=True):
         """
@@ -142,7 +139,7 @@ class Client(object):
             conn = aiohttp.TCPConnector(limit=0, limit_per_host=0)
             timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
             async with aiohttp.ClientSession(connector=conn, timeout=timeout) as self.__session:
-                self.create_sub_clients()
+                await self.create_sub_clients()
                 for chain in chains:
                     await self.bounties.fetch_parameters(chain)
                     await self.staking.fetch_parameters(chain)
@@ -163,14 +160,14 @@ class Client(object):
         self.relay = None
         self.staking = None
 
-    def create_sub_clients(self):
+    async def create_sub_clients(self):
         # Test polyswarmd, then either load etheruem or fast
         try:
             # Wallets only exists in polyswarmd-fast
-            with self.__session.options('/wallets/') as response:
+            async with self.__session.options(f'{self.polyswarmd_uri}/wallets/') as response:
                 response.raise_for_status()
             self.create_fast_sub_clients()
-        except aiohttp.ClientResponseError:
+        except (aiohttp.ClientResponseError, aiohttp.ClientConnectionError):
             logger.debug('Polyswarmd only support ethereum')
             self.create_ethereum_sub_clients()
 
@@ -191,6 +188,7 @@ class Client(object):
         self.balances = BalanceClient(self)
 
         async def periodic():
+            # FIXME PSC continues to hit a down polyswarmd, because the trigger is time, not blocks from websocket
             while True:
                 number = int(time.time())
                 asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain='side'))
@@ -200,14 +198,13 @@ class Client(object):
 
         asyncio.get_event_loop().create_task(periodic())
 
-    async def make_request(self, method, path, chain, data=None, json=None, send_nonce=False, api_key=None, tries=2, params=None):
+    async def make_request(self, method, path, chain, json=None, send_nonce=False, api_key=None, tries=2, params=None):
         """Make a request to polyswarmd, expecting a json response
 
         Args:
             method (str): HTTP method to use
             path (str): Path portion of URI to send request to
             chain (str): Which chain to operate on
-            data (Dict[str, Any]): Optional data dict to send with request
             json (obj): JSON payload to send with request
             send_nonce (bool): Whether to include a base_nonce query string parameter in this request
             api_key (str): Override default API key
@@ -240,7 +237,10 @@ class Client(object):
         # Allow overriding API key per request
         if api_key is None:
             api_key = self.api_key
-        headers = {'Authorization': api_key} if api_key is not None else None
+        headers = {}
+
+        if api_key:
+            headers = {'Authorization': api_key}
 
         qs = '&'.join([a + '=' + str(b) for (a, b) in params.items()])
         response = {}
@@ -249,7 +249,7 @@ class Client(object):
 
             response = {}
             try:
-                async with self.__session.request(method, uri, params=params, headers=headers, data=data, json=json)\
+                async with self.__session.request(method, uri, params=params, headers=headers, json=json)\
                         as raw_response:
                     try:
                         # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
@@ -299,7 +299,7 @@ class Client(object):
             logger.warning('Invalid IPFS URI: %s', ipfs_uri)
             return []
 
-        path = f'/artifacts/{ipfs_uri}'
+        path = f'/artifacts/{ipfs_uri}/'
 
         # Chain parameter doesn't matter for artifacts, just set to side
         success, result = await self.make_request('GET', path, 'side', api_key=api_key, tries=tries)
@@ -335,7 +335,7 @@ class Client(object):
         if not utils.is_valid_ipfs_uri(ipfs_uri):
             raise ValueError('Invalid IPFS URI')
 
-        uri = f'{self.polyswarmd_uri}/artifacts/{ipfs_uri}/{index}'
+        uri = f'{self.polyswarmd_uri}/artifacts/{ipfs_uri}/{index}/'
         logger.debug('getting artifact from uri: %s', uri)
 
         params = dict(self.params)
@@ -427,7 +427,7 @@ class Client(object):
             (str): IPFS URI of the uploaded artifact
         """
 
-        uri = f'{self.polyswarmd_uri}/artifacts'
+        uri = f'{self.polyswarmd_uri}/artifacts/'
         logger.debug('posting artifact to uri: %s', uri)
 
         params = dict(self.params)
@@ -540,7 +540,7 @@ class Client(object):
                     self.on_withdraw_stake_due.run(amount=task.amount, chain=chain))
 
     @backoff.on_exception(backoff.expo, (websockets.exceptions.ConnectionClosed, OSError, asyncio.TimeoutError,
-                                         websockets.exceptions.InvalidHandshake), max_time=utils.MAX_WAIT)
+                                         websockets.exceptions.InvalidHandshake))
     async def listen_for_events(self, chain):
         """Listen for events via websocket connection to polyswarmd
         Args:
@@ -552,7 +552,7 @@ class Client(object):
             raise ValueError(f'polyswarmd_uri protocol is not http or https, got {self.polyswarmd_uri}')
 
         # http:// -> ws://, https:// -> wss://
-        wsuri = f'{self.polyswarmd_uri.replace("http", "ws", 1)}/events?chain={chain}'
+        wsuri = f'{self.polyswarmd_uri.replace("http", "ws", 1)}/events/?chain={chain}'
         last_block = 0
         try:
             async with websockets.connect(wsuri) as ws:

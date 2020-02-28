@@ -349,7 +349,7 @@ class BountiesClient(object):
 
         return result
 
-    async def post_assertion(self, bounty_guid, bid, mask, verdicts, chain, api_key=None):
+    async def post_assertion(self, bounty_guid, bid, mask, verdicts, chain, api_key=None, metadata=None):
         """Post an assertion to polyswarmd.
 
         Args:

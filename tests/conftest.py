@@ -4,11 +4,10 @@ import pytest
 import tempfile
 import sys
 
-from . import success
+from . import success, failure
 from aioresponses import aioresponses
 from asynctest.mock import patch
 from polyswarmclient import Client
-from polyswarmclient.utils import asyncio_stop
 
 # THE FOLLOWING KEY IS FOR TESTING PURPOSES ONLY
 TESTKEY = base64.b64decode(
@@ -68,7 +67,6 @@ class WebsocketMock(object):
 
     def close(self):
         self.closed = True
-        self.queue.put_nowait(None)
 
     async def recv(self):
         return await self.queue.get()
@@ -108,14 +106,21 @@ class MockClient(Client):
         else:
             raise ValueError('Invalid chain running')
 
-    async def wait_for_running(self):
-        await asyncio.wait([self.home_init_done.wait(), self.side_init_done.wait()])
+    async def run_task(self, chains=None, listen_for_events=True):
+        try:
+            return await super().run_task(chains, listen_for_events)
+        except asyncio.CancelledError:
+            pass
 
-    def start(self):
+    async def wait_for_running(self):
+        await asyncio.wait([self.home_init_done.wait(),  self.side_init_done.wait()])
+
+    async def start(self):
         self.http_mock.start()
         self.__ws_mock_manager.start()
 
         # This is needed to get us through initialization
+        self.http_mock.options(self.url_with_parameters('/wallets/'), body=failure([]))
         self.http_mock.get(self.url_with_parameters('/nonce', chain='home'), body=success(0))
         self.http_mock.get(self.url_with_parameters('/nonce', chain='side'), body=success(0))
 
@@ -150,17 +155,16 @@ class MockClient(Client):
             self.http_mock.get(self.url_with_parameters('/staking/parameters', chain='side'),
                                body=success(staking_parameters))
 
-        asyncio.get_event_loop().create_task(self.run_task())
-        asyncio.get_event_loop().run_until_complete(self.wait_for_running())
+        task = asyncio.get_event_loop().create_task(self.run_task())
+        await self.wait_for_running()
 
-        self.home_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events?chain=home']
-        self.side_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events?chain=side']
+        self.home_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events/?chain=home']
+        self.side_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events/?chain=side']
+        return task
 
     def stop(self):
         self.http_mock.stop()
         self.__ws_mock_manager.stop()
-
-        asyncio_stop()
 
     def __enter__(self):
         self.start()
@@ -183,9 +187,10 @@ class MockClient(Client):
 
 
 @pytest.fixture()
-def mock_client(event_loop):
+async def mock_client(event_loop):
     asyncio.set_event_loop(event_loop)
     client = MockClient()
-    client.start()
+    task = await client.start()
     yield client
+    task.cancel()
     client.stop()

@@ -5,6 +5,7 @@ from typing import Any, Dict
 import aiohttp
 from polyswarmtransaction import SignedTransaction, Transaction
 from polyswarmclient import Client
+from polyswarmclient.exceptions import TransactionError
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,12 @@ class PolySwarmTransactionRequest(metaclass=ABCMeta):
         return self.transaction.sign(self.client.account.key)
 
     async def post_transaction(self, signed: SignedTransaction, api_key: str) -> Dict[str, Any]:
-        success, results = await self.client.make_request('POST', self.path, data=signed.payload, api_key=api_key)
+        success, results = await self.client.make_request('POST', self.path, json=signed.payload, api_key=api_key,
+                                                          chain='side')
         # FIXME: Remove this temporary solution once there is time to use raise_for_status in make_request
         if not success:
-            raise aiohttp.ClientResponseError(message='Failed to post transaction')
+            logger.error('Error posting transaction: %s', results)
+            raise TransactionError('Failed to post transaction')
         return results
 
     @property

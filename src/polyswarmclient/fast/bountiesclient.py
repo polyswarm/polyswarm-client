@@ -6,8 +6,11 @@ from polyswarmartifact import ArtifactType
 from polyswarmclient.fast.transaction import PolySwarmTransactionRequest
 from polyswarmclient.parameters import Parameters
 from polyswarmtransaction.bounty import BountyTransaction, AssertionTransaction, VoteTransaction
+from polyswarmclient.exceptions import InvalidMetadataError
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_METADATA = '{"malware_family": ""}'
 
 
 class PostBountyTransactionRequest(PolySwarmTransactionRequest):
@@ -71,7 +74,7 @@ class BountiesClient(object):
         Returns:
             Bloom filter value for the artifact set
         """
-        pass
+        []
 
     async def get_bloom(self, bounty_guid, chain, api_key=None):
         """
@@ -82,7 +85,7 @@ class BountiesClient(object):
             chain (str): Which chain to operate on
             api_key (str): Override default API key
         """
-        pass
+        return []
 
     async def get_bounty(self, guid, chain, api_key=None):
         """Get a bounty from polyswarmd.
@@ -139,7 +142,7 @@ class BountiesClient(object):
             page += 1
             guids = await self.get_bounty_guids(page, count, chain, api_key)
 
-    async def post_bounty(self, artifact_type, amount, artifact_uri, duration, chain, api_key=None, metadata=None):
+    async def post_bounty(self, artifact_type, amount, artifact_uri, duration, chain, api_key=None, metadata=''):
         """Post a bounty to polyswarmd.
 
         Args:
@@ -158,10 +161,10 @@ class BountiesClient(object):
             metadata = {}
         guid = uuid.uuid4()
         transaction = PostBountyTransactionRequest(self.__client,
-                                                   guid,
+                                                   str(guid),
                                                    amount,
                                                    artifact_uri,
-                                                   ArtifactType.to_string(artifact_type),
+                                                   artifact_type.value,
                                                    duration,
                                                    metadata)
         result = await transaction.send(api_key=api_key)
@@ -204,7 +207,7 @@ class BountiesClient(object):
 
         return result
 
-    async def post_assertion(self, bounty_guid, bid, mask, verdicts, chain, api_key=None, metadata=None):
+    async def post_assertion(self, bounty_guid, bid, mask, verdicts, chain, api_key=None, metadata=DEFAULT_METADATA):
         """Post an assertion to polyswarmd.
 
         Args:
@@ -220,12 +223,13 @@ class BountiesClient(object):
         """
         try:
             metadata = json.loads(metadata)
-        except json.JSONDecodeError:
-            metadata = {}
-        if not isinstance(metadata, list):
-            metadata = [metadata]
-        transaction = PostAssertionTransactionRequest(self.__client, bounty_guid, bid[0], verdicts[0], metadata[0])
-        return await transaction.send(api_key=api_key)
+            if not isinstance(metadata, list):
+                metadata = [metadata]
+
+            transaction = PostAssertionTransactionRequest(self.__client, bounty_guid, bid[0], verdicts[0], metadata[0])
+            return 0, [await transaction.send(api_key=api_key)]
+        except (ValueError, json.JSONDecodeError) as e:
+            raise InvalidMetadataError from e
 
     async def post_reveal(self, bounty_guid, index, nonce, verdicts, metadata, chain, api_key=None):
         """Post an assertion reveal to polyswarmd.
@@ -244,17 +248,10 @@ class BountiesClient(object):
         pass
 
     async def post_metadata(self, metadata, chain, api_key=None):
-        """Posts metadata to IPFS
-
-        Args:
-            metadata (str): metadata json that conforms to Assertion Schema in polyswarm-artifact
-            chain (str): Which chain to operate on
-            api_key (str): Override default API key
-
-        Returns: ipfs_hash or None
-
         """
-        pass
+        Returns the metadata unchanged
+        """
+        return metadata
 
     async def get_vote(self, bounty_guid, index, chain, api_key=None):
         """
