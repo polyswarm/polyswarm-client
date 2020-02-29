@@ -363,7 +363,7 @@ class BountiesClient(object):
             Response JSON parsed from polyswarmd containing emitted events
         """
         fee = await self.parameters[chain].get('assertion_fee')
-        nonce, commitment = calculate_commitment(self.__client.account.address, bool_list_to_int(verdicts))
+        nonce, commitment = calculate_commitment(self.__client.account, bool_list_to_int(verdicts))
 
         transaction = PostAssertionTransaction(self.__client, bounty_guid, bid, fee, mask, commitment)
         success, result = await transaction.send(chain, api_key=api_key)
@@ -483,7 +483,7 @@ class BountiesClient(object):
             True if this account participated
 
         """
-        account = self.__client.account.address
+        account = self.__client.account
         bounty = await self.get_bounty(bounty_guid, chain, api_key)
         if not bounty:
             return False
@@ -512,7 +512,7 @@ class BountiesClient(object):
             Response JSON parsed from polyswarmd containing emitted events
         """
         if not await self.did_participate(bounty_guid, chain, api_key):
-            logger.debug('Will not settle %s because %s did not participate', bounty_guid, self.__client.account.address)
+            logger.debug('Will not settle %s because %s did not participate', bounty_guid, self.__client.account)
             return []
 
         transaction = SettleBountyTransaction(self.__client, bounty_guid)

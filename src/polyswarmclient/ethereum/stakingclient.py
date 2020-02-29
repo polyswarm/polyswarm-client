@@ -84,7 +84,7 @@ class StakingClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing staking balance
         """
-        path = '/balances/{0}/staking/total'.format(self.__client.account.address)
+        path = '/balances/{0}/staking/total'.format(self.__client.account)
         success, result = await self.__client.make_request('GET', path, chain, api_key=api_key)
         return int(result)
 
@@ -97,7 +97,7 @@ class StakingClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing staking balance
         """
-        path = '/balances/{0}/staking/withdrawable'.format(self.__client.account.address)
+        path = '/balances/{0}/staking/withdrawable'.format(self.__client.account)
         success, result = await self.__client.make_request('GET', path, chain, api_key=api_key)
         return int(result)
 

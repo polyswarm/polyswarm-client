@@ -46,7 +46,7 @@ class PolySwarmTransactionRequest(metaclass=ABCMeta):
         Returns:
             SignedTransaction
         """
-        return self.transaction.sign(self.client.account.key)
+        return self.transaction.sign(self.client.priv_key)
 
     async def post_transaction(self, signed: SignedTransaction, api_key: str) -> Dict[str, Any]:
         success, results = await self.client.make_request('POST', self.path, json=signed.payload, api_key=api_key,

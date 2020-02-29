@@ -31,10 +31,10 @@ class BalanceClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing nectar balance
         """
-        path = '/balances/{0}/nct'.format(self.__client.account.address)
+        path = '/balances/{0}/nct'.format(self.__client.account)
         success, balance = await self.__client.make_request('GET', path, chain, api_key=api_key)
         if not success:
-            logger.warning('Unable to get nectar balance for %s', self.__client.account.address)
+            logger.warning('Unable to get nectar balance for %s', self.__client.account)
             return 0
 
         return int(balance)
@@ -48,10 +48,10 @@ class BalanceClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing eth balance
         """
-        path = '/balances/{0}/eth'.format(self.__client.account.address)
+        path = '/balances/{0}/eth'.format(self.__client.account)
         success, balance = await self.__client.make_request('GET', path, chain, api_key=api_key)
         if not success:
-            logger.warning('Unable to get eth balance for %s', self.__client.account.address)
+            logger.warning('Unable to get eth balance for %s', self.__client.account)
             return 0
 
         return int(balance)

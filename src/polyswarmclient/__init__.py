@@ -52,8 +52,8 @@ class Client(object):
         with open(keyfile, 'r') as f:
             self.priv_key = w3.eth.account.decrypt(f.read(), password)
 
-        self.account = w3.eth.account.from_key(self.priv_key)
-        logger.info('Using account: %s', self.account.address)
+        self.account = w3.eth.account.from_key(self.priv_key).address
+        logger.info('Using account: %s', self.account)
 
         self.__session = None
 
@@ -120,7 +120,7 @@ class Client(object):
         Args:
             chains (set(str)): Set of chains to operate on. Defaults to {'home', 'side'}
         """
-        self.params = {'account': self.account.address}
+        self.params = {'account': self.account}
         if chains is None:
             chains = {'home', 'side'}
 

@@ -17,7 +17,7 @@ class RelayDepositTransaction(EthereumTransaction):
         super().__init__(client, [transfer])
 
     def get_path(self):
-        return f'/wallets/{self.client.account.address}/deposit/'
+        return f'/wallets/{self.client.account}/deposit/'
 
     def get_body(self):
         return {
@@ -40,7 +40,7 @@ class RelayWithdrawTransactionRequest(PolySwarmTransactionRequest):
 
     @property
     def path(self):
-        return f'/wallets/{self.client.account.address}/withdrawal/'
+        return f'/wallets/{self.client.account}/withdrawal/'
 
 
 class RelayClient(object):

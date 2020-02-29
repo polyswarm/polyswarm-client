@@ -315,7 +315,7 @@ class BountiesClient(object):
             True if this account participated
 
         """
-        account = self.__client.account.address
+        account = self.__client.account
         bounty = await self.get_bounty(bounty_guid, chain, api_key)
         if not bounty:
             return False
