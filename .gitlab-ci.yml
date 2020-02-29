@@ -98,8 +98,4 @@ release-latest-linux:
     - docker tag $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA polyswarm/$BASE_IMAGE_NAME:latest
     # Pushes to AWS
     - docker push $REPO_URL/$BASE_IMAGE_NAME:latest
-    # Pushes to DockerHub
-    - docker logout
-    - docker login -u $CI_CUSTOM_DOCKER_HUB_USERNAME -p $CI_CUSTOM_DOCKER_HUB_PASSWORD
-    - docker push polyswarm/$BASE_IMAGE_NAME:latest
 
