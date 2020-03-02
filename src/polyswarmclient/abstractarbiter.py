@@ -220,7 +220,7 @@ class AbstractArbiter(object):
             bounty_bloom = bounty_bloom << 256 | int(b)
 
         calculated_bloom = await self.client.bounties.calculate_bloom(uri)
-        valid_bloom = bounty and bounty_bloom == calculated_bloom
+        valid_bloom = bounty_bloom == calculated_bloom
 
         vb = VoteOnBounty(guid, votes, valid_bloom)
         self.client.schedule(vote_start, vb, chain)
