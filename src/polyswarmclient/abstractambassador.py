@@ -3,6 +3,7 @@ import hashlib
 import logging
 import magic
 import os
+import time
 
 from abc import ABC, abstractmethod
 
@@ -178,7 +179,7 @@ class AbstractAmbassador(ABC):
                 try:
                     bounty = self.bounty_queues[chain].get_nowait()
                 except asyncio.queues.QueueEmpty:
-                    logger.debug('Queue empty, waiting for next window')
+                    await self._handle_empty_queue()
                     break
 
                 if bounty is None:
@@ -375,3 +376,9 @@ class AbstractAmbassador(ABC):
             asyncio_stop()
 
         return ret
+
+    async def _handle_empty_queue(self):
+        """
+        Just debug log on empty queue.
+        """
+        logger.debug('Queue empty, waiting for next window')

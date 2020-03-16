@@ -1,0 +1,52 @@
+interactions:
+- request:
+    body: null
+    headers: {}
+    method: OPTIONS
+    uri: http://polyswarmd-fast:8000/v1/wallets/
+  response:
+    body:
+      string: '{"result": {"name": "Wallet List", "description": "Allows an Wallet
+        to check actual balance, deposit or withdraw resources", "renders": ["application/json",
+        "text/html"], "parses": ["application/json", "application/x-www-form-urlencoded",
+        "multipart/form-data"], "actions": {"POST": {"owner": {"type": "string", "required":
+        true, "read_only": false, "label": "Owner", "max_length": 42}, "nct": {"type":
+        "decimal", "required": false, "read_only": true, "label": "Nct"}, "eth": {"type":
+        "decimal", "required": false, "read_only": true, "label": "Eth"}, "balance":
+        {"type": "decimal", "required": true, "read_only": false, "label": "Balance"},
+        "metadata": {"type": "field", "required": false, "read_only": false, "label":
+        "Metadata"}}}}, "status": "OK"}'
+    headers:
+      Allow: GET, POST, HEAD, OPTIONS
+      Content-Length: '750'
+      Content-Type: application/json
+      Date: Fri, 13 Mar 2020 14:48:52 GMT
+      Vary: Accept, Cookie
+      X-Frame-Options: SAMEORIGIN
+    status:
+      code: 200
+      message: OK
+    url: http://polyswarmd-fast:8000/v1/wallets/
+- request:
+    body: null
+    headers: {}
+    method: GET
+    uri: http://polyswarmd-fast:8000/v1/bounties/parameters/?account=0xECaD0AFcab82F8E4a1CF0E9525265371B586EFbd&chain=side
+  response:
+    body:
+      string: '{"result": {"arbiter_vote_window": 100, "assertion_bid_maximum": 1000000000000000000,
+        "assertion_bid_minimum": 62500000000000000, "assertion_fee": 31250000000000000,
+        "assertion_reveal_window": 0, "bounty_amount_minimum": 2000000000000000000,
+        "bounty_fee": 62500000000000000, "max_duration": 100}, "status": "OK"}'
+    headers:
+      Allow: GET, HEAD, OPTIONS
+      Content-Length: '312'
+      Content-Type: application/json
+      Date: Fri, 13 Mar 2020 14:48:52 GMT
+      Vary: Accept, Cookie
+      X-Frame-Options: SAMEORIGIN
+    status:
+      code: 200
+      message: OK
+    url: http://polyswarmd-fast:8000/v1/bounties/parameters/?account=0xECaD0AFcab82F8E4a1CF0E9525265371B586EFbd&chain=side
+version: 1

@@ -9,7 +9,7 @@ import uuid
 from unittest.mock import patch
 
 import polyswarmclient.utils
-from . import success, event, random_address, random_bitset, random_ipfs_uri
+from .utils.fixtures import success, event, random_address, random_bitset, random_ipfs_uri, mock_client
 
 
 def test_check_response():
@@ -45,7 +45,6 @@ def test_calculate_commitment(mock_fn):
 async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='home'), body=success(42))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='home'), body=success([]))
-
     home = mock_client.nonce_managers['home']
     await home.setup()
     await home.reserve(1)
