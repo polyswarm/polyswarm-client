@@ -150,7 +150,7 @@ class MockClient(Client):
         self.__ws_mock_manager.start()
 
         # This is needed to get us through initialization
-        self.http_mock.options(self.url_with_parameters('/wallets/'), body=failure([]))
+        self.http_mock.options('http://localhost/wallets/', status=404)
         self.http_mock.get(self.url_with_parameters('/nonce', chain='home'), body=success(0))
         self.http_mock.get(self.url_with_parameters('/nonce', chain='side'), body=success(0))
 

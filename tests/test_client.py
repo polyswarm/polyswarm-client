@@ -42,6 +42,7 @@ def test_calculate_commitment(mock_fn):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(15)
 async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='home'), body=success(42))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='home'), body=success([]))
@@ -62,6 +63,7 @@ async def test_update_base_nonce(mock_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(15)
 async def test_list_artifacts(mock_client):
     invalid_ipfs_uri = '#!$!'
     assert await mock_client.list_artifacts(invalid_ipfs_uri) == []
