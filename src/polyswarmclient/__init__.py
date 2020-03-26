@@ -160,7 +160,7 @@ class Client(object):
         self.relay = None
         self.staking = None
 
-    @backoff.on_exception(backoff.expo, aiohttp.ClientError)
+    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError))
     async def create_sub_clients(self):
         # Test polyswarmd, then either load etheruem or fast
         try:
@@ -176,6 +176,9 @@ class Client(object):
             self.create_fast_sub_clients()
         except aiohttp.ClientConnectionError:
             logger.exception('Unable to connect to polyswarmd')
+            raise
+        except asyncio.TimeoutError:
+            logger.exception('Timeout connecting to polyswarmd')
             raise
 
     def create_ethereum_sub_clients(self):

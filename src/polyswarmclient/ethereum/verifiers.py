@@ -169,7 +169,6 @@ class PostBountyVerifier(AbstractTransactionVerifier):
             bloom_value = bloom_value << 256 | int(b)
 
         artifact_type = ArtifactType(int(artifact_type))
-        artifact_uri = artifact_uri.decode('utf-8')
 
         return decoded.value == 0 and \
             artifact_type == self.artifact_type and \
@@ -178,7 +177,7 @@ class PostBountyVerifier(AbstractTransactionVerifier):
             duration == self.duration and \
             bloom_value == self.bloom and \
             amount == self.amount and \
-            metadata.decode('utf-8') == self.metadata
+            metadata == self.metadata
 
 
 class PostAssertionVerifier(AbstractTransactionVerifier):
@@ -231,7 +230,6 @@ class RevealAssertionVerifier(AbstractTransactionVerifier):
         logger.debug('Expected: %s, Actual: %s', self, decoded)
         bounty_guid, index, nonce, verdicts, metadata = decoded.parameters
 
-        metadata = metadata.decode('utf-8')
         # If there is a 1 anywhere beyond the length of items we expect, fail it
         if verdicts >> len(self.verdicts) > 0:
             return False

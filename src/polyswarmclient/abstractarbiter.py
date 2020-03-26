@@ -135,7 +135,7 @@ class AbstractArbiter(object):
             raise FatalError('Scanner setup failed', 1)
 
     async def deposit_stake(self, nct, chain):
-        self.client.balances.raise_for_low_balance(nct, chain)
+        await self.client.balances.raise_for_low_balance(nct, chain)
         deposits = await self.client.staking.post_deposit(nct, chain)
         logger.info('Depositing stake: %s', deposits)
 

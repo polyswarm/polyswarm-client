@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class PostBountyTransaction(EthereumTransaction):
-    def __init__(self, client, artifact_type, amount, bounty_fee, artifact_uri, num_artifacts, duration, bloom,
+    def __init__(self, client, artifact_type, amount, bounty_fee, artifact_uri, num_artifacts, duration, bloom_,
                  metadata):
         self.amount = amount
         self.artifact_type = artifact_type
@@ -30,7 +30,7 @@ class PostBountyTransaction(EthereumTransaction):
             self.metadata = ''
 
         approve = NctApproveVerifier(amount + bounty_fee)
-        bounty = PostBountyVerifier(artifact_type, amount, artifact_uri, num_artifacts, duration, bloom, self.metadata)
+        bounty = PostBountyVerifier(artifact_type, amount, artifact_uri, num_artifacts, duration, bloom_, self.metadata)
 
         super().__init__(client, [approve, bounty])
 
@@ -295,7 +295,7 @@ class BountiesClient(object):
         metadata = metadata or ''
         if metadata:
             try:
-                metadata = self.post_metadata(metadata, chain, api_key)
+                metadata = await self.post_metadata(metadata, chain, api_key)
             except (json.JSONDecodeError, aiohttp.client.ClientResponseError):
                 warnings.warn('Posting non-json, or non-confirming json is deprecated', DeprecationWarning)
                 pass
@@ -387,7 +387,7 @@ class BountiesClient(object):
             Response JSON parsed from polyswarmd containing emitted events
         """
         try:
-            metadata = self.post_metadata(metadata, chain, api_key)
+            metadata = await self.post_metadata(metadata, chain, api_key)
         except (json.JSONDecodeError, aiohttp.client.ClientResponseError):
             warnings.warn('Posting non-json, or non-confirming json is deprecated', DeprecationWarning)
             pass
@@ -404,14 +404,16 @@ class BountiesClient(object):
         """Posts metadata to IPFS
 
         Args:
-            metadata (str): metadata json that conforms to Assertion Schema in polyswarm-artifact
+            metadata (str): metadata json that conforms to Schema in polyswarm-artifact
             chain (str): Which chain to operate on
             api_key (str): Override default API key
 
         Returns: ipfs_hash or None
 
         """
-        metadata = json.loads(metadata)
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata)
+
         success, ipfs_hash = await self.__client.make_request('POST', '/bounties/metadata', chain,
                                                               json=metadata,
                                                               api_key=api_key)
