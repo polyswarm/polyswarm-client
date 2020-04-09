@@ -160,12 +160,14 @@ class Client(object):
         self.relay = None
         self.staking = None
 
-    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError))
+    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=3)
     async def create_sub_clients(self):
-        # Test polyswarmd, then either load etheruem or fast
+        # Test polyswarmd, then either load ethereum or fast
         try:
             # Wallets only exists in polyswarmd-fast
-            headers = {'Authorization': self.api_key}
+            headers = {}
+            if self.api_key:
+                headers.update({'Authorization': self.api_key})
             async with self.__session.options(f'{self.polyswarmd_uri}/wallets/', headers=headers) as response:
                 if response.status == 404:
                     logger.debug('Using ethereum sub-clients')

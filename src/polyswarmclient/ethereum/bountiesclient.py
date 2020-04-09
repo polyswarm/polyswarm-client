@@ -292,14 +292,6 @@ class BountiesClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
-        metadata = metadata or ''
-        if metadata:
-            try:
-                metadata = await self.post_metadata(metadata, chain, api_key)
-            except (json.JSONDecodeError, aiohttp.client.ClientResponseError):
-                warnings.warn('Posting non-json, or non-confirming json is deprecated', DeprecationWarning)
-                pass
-
         bounty_fee = await self.parameters[chain].get('bounty_fee')
         bloom = await self.calculate_bloom(artifact_uri)
         num_artifacts = await self.__client.get_artifact_count(artifact_uri)
