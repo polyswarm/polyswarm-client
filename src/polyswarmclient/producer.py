@@ -89,24 +89,23 @@ class Producer:
 
         async def wait_for_result(result_key):
             try:
-                with await self.redis as redis:
-                    while True:
-                        result = await redis.lpop(result_key)
-                        if result:
-                            break
+                while True:
+                    result = await self.redis.lpop(result_key)
+                    if result:
+                        break
 
-                        await asyncio.sleep(1)
+                    await asyncio.sleep(1)
 
-                    response = JobResponse(**json.loads(result.decode('utf-8')))
+                response = JobResponse(**json.loads(result.decode('utf-8')))
 
-                    # increase perf counter for autoscaling
-                    q_counter = f'{self.queue}_scan_result_counter'
-                    await redis.incr(q_counter)
-                    confidence = response.confidence if not self.confidence_modifier \
-                        else self.confidence_modifier.modify(metadata[response.index], response.confidence)
+                # increase perf counter for autoscaling
+                q_counter = f'{self.queue}_scan_result_counter'
+                await self.redis.incr(q_counter)
+                confidence = response.confidence if not self.confidence_modifier \
+                    else self.confidence_modifier.modify(metadata[response.index], response.confidence)
 
-                    return response.index, ScanResult(bit=response.bit, verdict=response.verdict, confidence=confidence,
-                                                      metadata=response.metadata)
+                return response.index, ScanResult(bit=response.bit, verdict=response.verdict, confidence=confidence,
+                                                  metadata=response.metadata)
             except aioredis.errors.ReplyError:
                 logger.exception('Redis out of memory')
             except aioredis.errors.ConnectionForcedCloseError:
