@@ -164,9 +164,8 @@ class Worker:
         # Setup default response as ScanResult, in case we exceeded uses
         remaining_time = 0
         try:
-            self.get_remaining_time(job)
-            content = await self.download(job, session)
             remaining_time = self.get_remaining_time(job)
+            content = await self.download(job, session)
             scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
             response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                    scan_result.metadata)
