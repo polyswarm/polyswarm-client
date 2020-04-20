@@ -98,9 +98,9 @@ class Producer:
 
                 response = JobResponse(**json.loads(result.decode('utf-8')))
 
-                # increase perf counter for autoscaling
-                q_counter = f'{self.queue}_scan_result_counter'
-                await self.redis.incr(q_counter)
+                # increase result counter for autoscaling
+                result_counter = f'{self.queue}_scan_result_counter'
+                await self.redis.incr(result_counter)
                 confidence = response.confidence if not self.confidence_modifier \
                     else self.confidence_modifier.modify(metadata[response.index], response.confidence)
 
@@ -137,6 +137,10 @@ class Producer:
 
         if jobs:
             try:
+                # increase job counter for autoscalingFix
+                job_counter = f'{self.queue}_scan_job_counter'
+                await self.redis.incrby(job_counter, len(jobs))
+
                 await self.redis.rpush(self.queue, *jobs)
 
                 key = '{}_{}_{}_results'.format(self.queue, guid, chain)
