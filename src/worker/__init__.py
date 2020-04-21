@@ -165,7 +165,8 @@ class Worker:
         remaining_time = 0
         try:
             remaining_time = self.get_remaining_time(job)
-            content = await self.download(job, session)
+            content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
+            remaining_time = self.get_remaining_time(job)
             scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
             response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                    scan_result.metadata)
