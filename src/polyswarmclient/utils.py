@@ -4,7 +4,6 @@ import os
 import sys
 import uuid
 
-from hexbytes import HexBytes
 from web3 import Web3
 from concurrent.futures import ThreadPoolExecutor
 
@@ -115,6 +114,34 @@ def check_response(response):
     return ret
 
 
+def is_valid_uri(uri):
+    """
+    Ensure that a given uri is valid among any of the support hash types
+    :param uri: uri to validate
+    :return: is this valid
+    """
+    return is_valid_ipfs_uri(uri) or is_valid_sha256(uri)
+
+
+def is_valid_sha256(uri):
+    """Ensure that a given uri is a valid sha256 hash by checking length, and converting to an int
+
+        Args:
+            uri (str): uri to validate
+
+        Returns:
+            bool: is this valid
+        """
+    try:
+        return len(uri) == 64 and int(uri, 16)
+    except ValueError:
+        # not a sha256 uri
+        pass
+    except Exception as err:
+        logger.exception('Unexpected error: %s', err)
+    return False
+
+
 def is_valid_ipfs_uri(ipfs_uri):
     """Ensure that a given ipfs_uri is valid by checking length and base58 encoding.
 
@@ -127,7 +154,10 @@ def is_valid_ipfs_uri(ipfs_uri):
     # TODO: Further multihash validation
     try:
         return len(ipfs_uri) < 100 and base58.b58decode(ipfs_uri)
-    except TypeError:
+    except ValueError:
+        # not an ipfs URI
+        pass
+    except (TypeError, ValueError):
         logger.error('Invalid IPFS URI: %s', ipfs_uri)
     except Exception as err:
         logger.exception('Unexpected error: %s', err)

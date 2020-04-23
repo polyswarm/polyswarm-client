@@ -50,6 +50,12 @@ class InvalidMetadataError(PolyswarmClientException):
     """
 
 
+class UnsupportedHashError(PolyswarmClientException):
+    """
+    Raised when a hash doesn't match the format of a hash we use
+    """
+
+
 class FatalError(ClickException):
     def __init__(self, message='', exit_code=0):
         super().__init__(message)

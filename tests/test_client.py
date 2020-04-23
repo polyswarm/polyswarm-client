@@ -23,12 +23,31 @@ def test_check_response():
     assert not polyswarmclient.utils.check_response(invalid_response)
 
 
+def test_is_valid_sha256():
+    invalid_sha256 = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
+    assert not polyswarmclient.utils.is_valid_sha256(invalid_sha256)
+
+    valid_sha256 = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f'
+    assert polyswarmclient.utils.is_valid_sha256(valid_sha256)
+
+
 def test_is_valid_ipfs_uri():
-    invalid_ipfs_uri = '#!$!'
+    invalid_ipfs_uri = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f'
     assert not polyswarmclient.utils.is_valid_ipfs_uri(invalid_ipfs_uri)
 
     valid_ipfs_uri = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
     assert polyswarmclient.utils.is_valid_ipfs_uri(valid_ipfs_uri)
+
+
+def test_is_valid_uri():
+    invalid_uri = '#!$!'
+    assert not polyswarmclient.utils.is_valid_uri(invalid_uri)
+
+    valid_ipfs_uri = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
+    assert polyswarmclient.utils.is_valid_uri(valid_ipfs_uri)
+
+    valid_sha256 = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f'
+    assert polyswarmclient.utils.is_valid_uri(valid_sha256)
 
 
 @patch('os.urandom', return_value=0x41)

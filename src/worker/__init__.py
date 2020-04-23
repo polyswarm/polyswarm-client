@@ -9,11 +9,12 @@ import signal
 import time
 
 from aiohttp import ClientSession
+from concurrent.futures.process import ProcessPoolExecutor
 from typing import AsyncGenerator
 
 from polyswarmartifact import DecodeError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
-from polyswarmclient.exceptions import ApiKeyException, ExpiredException, FatalError
+from polyswarmclient.exceptions import ApiKeyException, ExpiredException, FatalError, UnsupportedHashError
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
 from polyswarmclient.utils import asyncio_join, asyncio_stop, MAX_WAIT, configure_event_loop
@@ -60,6 +61,7 @@ class Worker:
         self.download_semaphore = None
         self.scan_semaphore = None
         self.job_semaphore = None
+        self.process_pool = None
         self.tries = 0
         self.finished = False
         # Setup a liveness instance
@@ -92,6 +94,7 @@ class Worker:
         loop.run_until_complete(self.run_task())
 
     async def setup(self, loop: asyncio.AbstractEventLoop):
+        self.setup_process_pool()
         self.setup_semaphores(loop)
         self.setup_graceful_shutdown(loop)
         await self.setup_liveness(loop)
@@ -99,6 +102,9 @@ class Worker:
         if not await self.scanner.setup():
             logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
             raise FatalError('Scanner setup failed', 1)
+
+    def setup_process_pool(self):
+        self.process_pool = ProcessPoolExecutor()
 
     def setup_semaphores(self, loop: asyncio.AbstractEventLoop):
         self.scan_semaphore = OptionalSemaphore(value=self.scan_limit, loop=loop)
@@ -177,6 +183,8 @@ class Worker:
             logger.exception('Redis connection down')
         except aioredis.errors.ReplyError:
             logger.exception('Redis out of memory')
+        except UnsupportedHashError:
+            logger.exception('Uri was not a supported hash', extra={'extra': job.asdict()})
         except ExpiredException:
             logger.exception(f'Received expired job', extra={'extra': job.asdict()})
         except aiohttp.ClientResponseError:

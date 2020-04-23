@@ -307,7 +307,7 @@ class Client(object):
             List[(str, str)]: A list of tuples. First tuple element is the artifact name, second tuple element
             is the artifact hash.
         """
-        if not utils.is_valid_ipfs_uri(ipfs_uri):
+        if not utils.is_valid_uri(ipfs_uri):
             logger.warning('Invalid IPFS URI: %s', ipfs_uri)
             return []
 
@@ -344,7 +344,7 @@ class Client(object):
         Returns:
             (bytes): Content of the artifact
         """
-        if not utils.is_valid_ipfs_uri(ipfs_uri):
+        if not utils.is_valid_uri(ipfs_uri):
             raise ValueError('Invalid IPFS URI')
 
         uri = f'{self.polyswarmd_uri}/artifacts/{ipfs_uri}/{index}/'
@@ -398,7 +398,7 @@ class Client(object):
             return self
 
         async def __anext__(self):
-            if not utils.is_valid_ipfs_uri(self.ipfs_uri):
+            if not utils.is_valid_uri(self.ipfs_uri):
                 raise StopAsyncIteration
 
             i = self.i
