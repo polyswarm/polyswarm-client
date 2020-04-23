@@ -188,7 +188,6 @@ class AbstractAmbassador(ABC):
 
                 bounties_this_block += 1
                 await self.bounty_semaphores[chain].acquire()
-                await self.client.liveness_recorder.add_waiting_task(bounty.ipfs_uri, self.last_block)
                 asyncio.get_event_loop().create_task(self.submit_bounty(bounty, chain))
 
     async def submit_bounty(self, bounty, chain):
@@ -198,29 +197,30 @@ class AbstractAmbassador(ABC):
             bounty (QueuedBounty): Bounty to submit
             chain: Name of the chain to post to
         """
-        bounty_fee = await self.client.bounties.parameters[chain].get('bounty_fee')
-        try:
-            await self.client.balances.raise_for_low_balance(bounty.amount + bounty_fee, chain)
-        except LowBalanceError as e:
-            await self.client.liveness_recorder.remove_waiting_task(bounty.ipfs_uri)
-            await self.on_bounty_post_failed(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration,
-                                             chain, metadata=bounty.metadata)
-            self.bounty_queues[chain].task_done()
-            self.bounty_semaphores[chain].release()
-            if self.client.tx_error_fatal:
-                raise FatalError('Failed to post bounty due to low balance') from e
+        async with self.client.liveness_recorder.waiting_task(bounty.ipfs_uri, self.last_block):
+            bounty_fee = await self.client.bounties.parameters[chain].get('bounty_fee')
+            try:
+                await self.client.balances.raise_for_low_balance(bounty.amount + bounty_fee, chain)
+            except LowBalanceError as e:
+                await self.on_bounty_post_failed(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration,
+                                                 chain, metadata=bounty.metadata)
+                self.bounty_queues[chain].task_done()
+                self.bounty_semaphores[chain].release()
+                if self.client.tx_error_fatal:
+                    raise FatalError('Failed to post bounty due to low balance') from e
+                else:
+                    return
 
-        assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
-        arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
-        metadata = None
-        if bounty.metadata is not None:
-            metadata = await self.client.bounties.post_metadata(bounty.metadata, chain)
+            assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
+            arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
+            metadata = None
+            if bounty.metadata is not None:
+                metadata = await self.client.bounties.post_metadata(bounty.metadata, chain)
 
-        await self.on_before_bounty_posted(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration, chain)
-        bounties = await self.client.bounties.post_bounty(bounty.artifact_type, bounty.amount, bounty.ipfs_uri,
-                                                          bounty.duration, chain, api_key=bounty.api_key,
-                                                          metadata=metadata)
-        await self.client.liveness_recorder.remove_waiting_task(bounty.ipfs_uri)
+            await self.on_before_bounty_posted(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration, chain)
+            bounties = await self.client.bounties.post_bounty(bounty.artifact_type, bounty.amount, bounty.ipfs_uri,
+                                                              bounty.duration, chain, api_key=bounty.api_key,
+                                                              metadata=metadata)
         if not bounties:
             await self.on_bounty_post_failed(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration,
                                              chain, metadata=bounty.metadata)

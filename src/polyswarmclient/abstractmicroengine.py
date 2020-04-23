@@ -228,47 +228,44 @@ class AbstractMicroengine(object):
         expiration = int(expiration)
         duration = expiration - block_number
 
-        await self.client.liveness_recorder.add_waiting_task(guid, block_number)
-        results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
-        mask = [r.bit for r in results]
-        verdicts = [r.verdict for r in results]
-        confidences = [r.confidence for r in results]
-        metadatas = [r.metadata for r in results]
-        combined_metadata = ';'.join(metadatas)
+        async with self.client.liveness_recorder.waiting_task(guid, block_number):
+            results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
+            mask = [r.bit for r in results]
+            verdicts = [r.verdict for r in results]
+            confidences = [r.confidence for r in results]
+            metadatas = [r.metadata for r in results]
+            combined_metadata = ';'.join(metadatas)
 
-        try:
-            if all([metadata and verdict.Verdict.validate(json.loads(metadata)) for metadata in metadatas]):
-                combined_metadata = json.dumps([json.loads(metadata) for metadata in metadatas])
-        except json.JSONDecodeError:
-            logger.exception('Error decoding assertion metadata %s', metadatas)
+            try:
+                if all([metadata and verdict.Verdict.validate(json.loads(metadata)) for metadata in metadatas]):
+                    combined_metadata = json.dumps([json.loads(metadata) for metadata in metadatas])
+            except json.JSONDecodeError:
+                logger.exception('Error decoding assertion metadata %s', metadatas)
 
-        if not any(mask):
-            await self.client.liveness_recorder.remove_waiting_task(guid)
-            return []
+            if not any(mask):
+                return []
 
-        assertion_fee = await self.client.bounties.parameters[chain].get('assertion_fee')
-        assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
-        arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
+            assertion_fee = await self.client.bounties.parameters[chain].get('assertion_fee')
+            assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
+            arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
 
-        bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
-        try:
-            await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid), chain)
-        except LowBalanceError as e:
-            await self.client.liveness_recorder.remove_waiting_task(guid)
-            if self.client.tx_error_fatal:
-                raise FatalError('Failed to assert on bounty due to low balance') from e
+            bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
+            try:
+                await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid), chain)
+            except LowBalanceError as e:
+                if self.client.tx_error_fatal:
+                    raise FatalError('Failed to assert on bounty due to low balance') from e
 
-            return []
+                return []
 
-        logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
-        try:
-            nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain,
-                                                                          metadata=combined_metadata)
-        except InvalidMetadataError:
-            logger.exception('Received invalid metadata')
-            return []
+            logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
+            try:
+                nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain,
+                                                                              metadata=combined_metadata)
+            except InvalidMetadataError:
+                logger.exception('Received invalid metadata')
+                return []
 
-        await self.client.liveness_recorder.remove_waiting_task(guid)
         for a in assertions:
             ra = RevealAssertion(guid, a['index'], nonce, verdicts, combined_metadata)
             self.client.schedule(expiration, ra, chain)

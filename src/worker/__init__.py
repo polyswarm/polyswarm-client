@@ -160,14 +160,15 @@ class Worker:
                     self.job_semaphore.release()
 
     async def process_job(self, job: JobRequest, session: ClientSession):
-        await self.liveness_recorder.add_waiting_task(job.key, round(time.time()))
         # Setup default response as ScanResult, in case we exceeded uses
         remaining_time = 0
         try:
-            remaining_time = self.get_remaining_time(job)
-            content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
-            remaining_time = self.get_remaining_time(job)
-            scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
+            async with self.liveness_recorder.waiting_task(job.key, round(time.time())):
+                remaining_time = self.get_remaining_time(job)
+                content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
+                remaining_time = self.get_remaining_time(job)
+                scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
+
             response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                    scan_result.metadata)
             await self.respond(job, response)
@@ -190,7 +191,6 @@ class Worker:
         except asyncio.CancelledError:
             logger.exception(f'Worker shutdown while processing job', extra={'extra': job.asdict()})
         finally:
-            await self.liveness_recorder.remove_waiting_task(job.key)
             self.job_semaphore.release()
 
     @staticmethod
