@@ -3,15 +3,12 @@ aiohttp==3.6.2
 aioredis==1.3.1
 aioresponses==0.6.3
 aiorwlock==0.6.0
-asynctest==0.13.0
 backoff==1.10.0
 base58==2.0.0
 git+https://github.com/polyswarm/python-clamd.git@async#egg=clamd
 click==7.0
-coverage==5.0.3
 dataclasses==0.7; python_version == '3.6'
 hexbytes==0.2.0
-hypothesis==5.5.4
 jsonschema==3.2.0
 polyswarm-artifact==1.3.2
 pycryptodome>=3.9.7

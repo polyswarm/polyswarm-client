@@ -1,7 +1,6 @@
 import asyncio
 import logging
 
-import backoff
 from polyswarmartifact import ArtifactType, DecodeError
 
 from polyswarmclient import Client
@@ -11,7 +10,6 @@ from polyswarmclient.exceptions import LowBalanceError, FatalError
 from polyswarmclient.utils import asyncio_stop
 
 logger = logging.getLogger(__name__)  # Initialize logger
-MAX_STAKE_RETRIES = 10
 
 
 class AbstractArbiter(object):

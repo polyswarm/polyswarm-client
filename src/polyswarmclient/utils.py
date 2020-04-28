@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 import os
 import sys
@@ -162,3 +163,19 @@ def is_valid_ipfs_uri(ipfs_uri):
     except Exception as err:
         logger.exception('Unexpected error: %s', err)
     return False
+
+
+def return_on_exception(exceptions=(Exception, ), default=None):
+    def outer_wrapper(func):
+        if not asyncio.iscoroutinefunction(func):
+            raise ValueError('return_on_exception decorator can only be used on coroutines')
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except exceptions:
+                return default
+
+        return wrapper
+    return outer_wrapper

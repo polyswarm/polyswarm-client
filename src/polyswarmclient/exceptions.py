@@ -50,6 +50,27 @@ class InvalidMetadataError(PolyswarmClientException):
     """
 
 
+class RateLimitedError(PolyswarmClientException):
+    """
+    Hit the rate limit from polyswarmd
+    """
+    pass
+
+
+class NonceDesyncError(PolyswarmClientException):
+    """
+    Got a nonce too low or too high error
+    """
+    pass
+
+
+class ReceiptError(PolyswarmClientException):
+    """
+    Failed to get receipt from polyswarmd
+    """
+    pass
+
+
 class UnsupportedHashError(PolyswarmClientException):
     """
     Raised when a hash doesn't match the format of a hash we use

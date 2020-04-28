@@ -13,8 +13,9 @@ from polyswarmclient import events
 from polyswarmclient import utils
 from polyswarmclient.bidstrategy import BidStrategyBase
 from polyswarmclient.ethereum.transaction import NonceManager
+from polyswarmclient.exceptions import RateLimitedError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
-
+from polyswarmclient.request_rate_limit import RequestRateLimit
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class Client(object):
         logger.info('Using account: %s', self.account)
 
         self.__session = None
+        self.rate_limit = None
 
         # Do not init nonce manager here. Need to wait until we can guarantee that our event loop is set.
         self.nonce_managers = {}
@@ -132,6 +134,8 @@ class Client(object):
         self.nonce_managers = {chain: NonceManager(self, chain) for chain in chains}
         for nonce_manager in self.nonce_managers.values():
             await nonce_manager.setup()
+
+        self.rate_limit = await RequestRateLimit.build()
 
         try:
             await self.liveness_recorder.start()
@@ -210,7 +214,11 @@ class Client(object):
 
         asyncio.get_event_loop().create_task(periodic())
 
-    async def make_request(self, method, path, chain, json=None, send_nonce=False, api_key=None, tries=2, params=None):
+    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ContentTypeError,
+                                RateLimitedError), default=(False, {}))
+    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError,
+                                             aiohttp.ContentTypeError, RateLimitedError), max_tries=2)
+    async def make_request(self, method, path, chain, json=None, send_nonce=False, api_key=None, params=None):
         """Make a request to polyswarmd, expecting a json response
 
         Args:
@@ -220,7 +228,6 @@ class Client(object):
             json (obj): JSON payload to send with request
             send_nonce (bool): Whether to include a base_nonce query string parameter in this request
             api_key (str): Override default API key
-            tries (int): Number of times to retry before giving up
             params (dict): Optional params for the request
         Returns:
             (bool, obj): Tuple of boolean representing success, and response JSON parsed from polyswarmd
@@ -230,15 +237,10 @@ class Client(object):
         if self.__session is None or self.__session.closed:
             raise Exception('Not running')
 
-        # Ensure we try at least once
-        tries = max(tries, 1)
-
         uri = f'{self.polyswarmd_uri}{path}'
         logger.debug('making request to url: %s', uri)
 
-        if params is None:
-            params = dict()
-
+        params = params or {}
         params.update(dict(self.params))
         params['chain'] = chain
 
@@ -247,56 +249,47 @@ class Client(object):
             params['base_nonce'] = 0
 
         # Allow overriding API key per request
-        if api_key is None:
-            api_key = self.api_key
+        api_key = api_key or self.api_key
         headers = {}
-
         if api_key:
             headers = {'Authorization': api_key}
 
-        qs = '&'.join([a + '=' + str(b) for (a, b) in params.items()])
         response = {}
-        while tries > 0:
-            tries -= 1
+        try:
+            async with await self.rate_limit.check():
+                async with self.__session.request(method, uri, params=params, headers=headers, json=json) as raw:
+                    if raw.status == 429:
+                        raise RateLimitedError
 
-            response = {}
-            try:
-                async with self.__session.request(method, uri, params=params, headers=headers, json=json)\
-                        as raw_response:
                     try:
-                        # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
-                        if raw_response.status == 429:
-                            logger.warning('Hit polyswarmd rate limits, sleeping then trying again')
-                            await asyncio.sleep(RATE_LIMIT_SLEEP)
-                            tries += 1
-                            continue
+                        response = await raw.json()
+                    except ValueError:
+                        response = await raw.read() if raw else 'None'
 
-                        response = await raw_response.json()
-                    except (ValueError, aiohttp.ContentTypeError):
-                        response = await raw_response.read() if raw_response else 'None'
-                        logger.error('Received non-json response from polyswarmd: %s, url: %s', response, uri)
-                        response = {}
-                        continue
-            except (OSError, aiohttp.ServerDisconnectedError):
-                logger.error('Connection to polyswarmd refused, retrying')
-            except asyncio.TimeoutError:
-                logger.error('Connection to polyswarmd timed out, retrying')
+                    queries = '&'.join([a + '=' + str(b) for (a, b) in params.items()])
+                    logger.debug('%s %s?%s', method, path, queries, extra={'extra': response})
 
-            logger.debug('%s %s?%s', method, path, qs, extra={'extra': response})
+                    if not utils.check_response(response):
+                        logger.warning('Request %s %s?%s failed', method, path, queries)
+                        return False, response.get('errors')
 
-            if not utils.check_response(response):
-                if tries > 0:
-                    logger.info('Request %s %s?%s failed, retrying...', method, path, qs)
-                    continue
-                else:
-                    logger.warning('Request %s %s?%s failed, giving up', method, path, qs)
-                    return False, response.get('errors')
+                    return True, response.get('result')
+        except aiohttp.ContentTypeError:
+            logger.exception('Received non-json response from polyswarmd: %s, url: %s', response, uri)
+            raise
+        except (OSError, aiohttp.ServerDisconnectedError):
+            logger.error('Connection to polyswarmd refused')
+            raise
+        except asyncio.TimeoutError:
+            logger.error('Connection to polyswarmd timed out')
+            raise
+        except RateLimitedError:
+            # Handle "Too many requests" rate limit by not hammering server, and pausing all requests for a bit
+            logger.warning('Hit polyswarmd rate limits, stopping all requests for a moment')
+            await self.rate_limit.trigger()
+            raise
 
-            return True, response.get('result')
-
-        return False, response.get('errors')
-
-    async def list_artifacts(self, ipfs_uri, api_key=None, tries=2):
+    async def list_artifacts(self, ipfs_uri, api_key=None):
         """Return a list of artificats from a given ipfs_uri.
 
         Args:
@@ -314,7 +307,7 @@ class Client(object):
         path = f'/artifacts/{ipfs_uri}/'
 
         # Chain parameter doesn't matter for artifacts, just set to side
-        success, result = await self.make_request('GET', path, 'side', api_key=api_key, tries=tries)
+        success, result = await self.make_request('GET', path, 'side', api_key=api_key)
         if not success:
             logger.error('Expected artifact listing, received', extra={'extra': result})
             return []
@@ -334,7 +327,11 @@ class Client(object):
         artifacts = await self.list_artifacts(ipfs_uri, api_key=api_key)
         return len(artifacts) if artifacts is not None and artifacts else 0
 
-    async def get_artifact(self, ipfs_uri, index, api_key=None, tries=2):
+    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ContentTypeError,
+                                RateLimitedError), default=None)
+    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError,
+                                             aiohttp.ContentTypeError, RateLimitedError), max_tries=2)
+    async def get_artifact(self, ipfs_uri, index, api_key=None):
         """Retrieve an artifact from IPFS via polyswarmd
 
         Args:
@@ -353,30 +350,31 @@ class Client(object):
         params = dict(self.params)
 
         # Allow overriding API key per request
-        if api_key is None:
-            api_key = self.api_key
-        headers = {'Authorization': api_key} if api_key is not None else None
+        api_key = api_key or self.api_key
+        headers = {}
+        if api_key:
+            headers = {'Authorization': api_key}
 
-        while tries > 0:
-            tries -= 1
-
-            try:
+        try:
+            async with await self.rate_limit.check():
                 async with self.__session.get(uri, params=params, headers=headers) as raw_response:
                     # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
                     if raw_response.status == 429:
-                        logger.warning('Hit polyswarmd rate limits, sleeping then trying again')
-                        await asyncio.sleep(RATE_LIMIT_SLEEP)
-                        tries += 1
-                        continue
+                        raise RateLimitedError
 
-                    if raw_response.status == 200:
+                    if raw_response.status / 100 == 2:
                         return await raw_response.read()
-            except (OSError, aiohttp.ServerDisconnectedError):
-                logger.error('Connection to polyswarmd refused')
-            except asyncio.TimeoutError:
-                logger.error('Connection to polyswarmd timed out')
-
-        return None
+        except (OSError, aiohttp.ServerDisconnectedError):
+            logger.error('Connection to polyswarmd refused')
+            raise
+        except asyncio.TimeoutError:
+            logger.error('Connection to polyswarmd timed out')
+            raise
+        except RateLimitedError:
+            # Handle "Too many requests" rate limit by not hammering server, and pausing all requests for a bit
+            logger.warning('Hit polyswarmd rate limits, stopping all requests for a moment')
+            await self.rate_limit.trigger()
+            raise
 
     @staticmethod
     def to_wei(amount, unit='ether'):
@@ -426,7 +424,10 @@ class Client(object):
 
         return Client.__GetArtifacts(self, ipfs_uri, api_key=api_key)
 
-    async def post_artifacts(self, files, api_key=None, tries=2):
+    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError), default=None)
+    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError),
+                          max_tries=2)
+    async def post_artifacts(self, files, api_key=None):
         """Post artifacts to polyswarmd, flexible files parameter to support different use-cases
 
         Args:
@@ -449,69 +450,64 @@ class Client(object):
             api_key = self.api_key
         headers = {'Authorization': api_key} if api_key is not None else None
 
-        while tries > 0:
-            tries -= 1
+        # MultipartWriter can only be used once, recreate if on retry
+        with aiohttp.MultipartWriter('form-data') as mpwriter:
+            response = {}
+            to_close = []
+            try:
+                for filename, f in files:
+                    # If contents is None, open filename for reading and remember to close it
+                    if f is None:
+                        f = open(filename, 'rb')
+                        to_close.append(f)
 
-            # MultipartWriter can only be used once, recreate if on retry
-            with aiohttp.MultipartWriter('form-data') as mpwriter:
-                response = {}
-                to_close = []
-                try:
-                    for filename, f in files:
-                        # If contents is None, open filename for reading and remember to close it
-                        if f is None:
-                            f = open(filename, 'rb')
-                            to_close.append(f)
+                    # If filename is None and our file object has a name attribute, use it
+                    if filename is None and hasattr(f, 'name'):
+                        filename = f.name
 
-                        # If filename is None and our file object has a name attribute, use it
-                        if filename is None and hasattr(f, 'name'):
-                            filename = f.name
-
-                        if filename:
-                            filename = os.path.basename(filename)
-                        else:
-                            filename = 'file'
-
-                        payload = aiohttp.payload.get_payload(f, content_type='application/octet-stream')
-                        payload.set_content_disposition('form-data', name='file', filename=filename)
-                        mpwriter.append_payload(payload)
-
-                    # Make the request
-                    async with self.__session.post(uri, params=params, headers=headers,
-                                                   data=mpwriter) as raw_response:
-                        try:
-                            # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
-                            if raw_response.status == 429:
-                                logger.warning('Hit polyswarmd rate limits, sleeping then trying again')
-                                await asyncio.sleep(RATE_LIMIT_SLEEP)
-                                tries += 1
-                                continue
-
-                            response = await raw_response.json()
-                        except (ValueError, aiohttp.ContentTypeError):
-                            response = await raw_response.read() if raw_response else 'None'
-                            logger.error('Received non-json response from polyswarmd: %s, uri: %s', response, uri)
-                            response = {}
-                            continue
-                except (OSError, aiohttp.ServerDisconnectedError):
-                    logger.error('Connection to polyswarmd refused, files: %s', files)
-                except asyncio.TimeoutError:
-                    logger.error('Connection to polyswarmd timed out, files: %s', files)
-                finally:
-                    for f in to_close:
-                        f.close()
-
-                logger.debug('POST/artifacts', extra={'extra': response})
-
-                if not utils.check_response(response):
-                    if tries > 0:
-                        logger.info('Posting artifacts to polyswarmd failed, retrying')
-                        continue
+                    if filename:
+                        filename = os.path.basename(filename)
                     else:
-                        logger.info('Posting artifacts to polyswarmd failed, giving up')
-                        return None
+                        filename = 'file'
 
-                return response.get('result')
+                    payload = aiohttp.payload.get_payload(f, content_type='application/octet-stream')
+                    payload.set_content_disposition('form-data', name='file', filename=filename)
+                    mpwriter.append_payload(payload)
+                    async with await self.rate_limit.check():
+                        # Make the request
+                        async with self.__session.post(uri, params=params, headers=headers,
+                                                       data=mpwriter) as raw_response:
+                            try:
+                                if raw_response.status == 429:
+                                    raise RateLimitedError
+
+                                response = await raw_response.json()
+                            except (ValueError, aiohttp.ContentTypeError):
+                                response = await raw_response.read() if raw_response else 'None'
+                                logger.error('Received non-json response from polyswarmd: %s, uri: %s', response, uri)
+                                response = {}
+            except (OSError, aiohttp.ServerDisconnectedError):
+                logger.error('Connection to polyswarmd refused, files: %s', files)
+                raise
+            except asyncio.TimeoutError:
+                logger.error('Connection to polyswarmd timed out, files: %s', files)
+                raise
+            except RateLimitedError:
+                # Handle "Too many requests" rate limit by not hammering server, and pausing all requests for a bit
+                logger.warning('Hit polyswarmd rate limits, stopping all requests for a moment')
+                await self.rate_limit.trigger()
+                raise
+            finally:
+                for f in to_close:
+                    f.close()
+
+            logger.debug('POST/artifacts', extra={'extra': response})
+
+            if not utils.check_response(response):
+                logger.info('Posting artifacts to polyswarmd failed, giving up')
+                return None
+
+            return response.get('result')
 
     def schedule(self, expiration, event, chain):
         """Schedule an event to execute on a particular block
