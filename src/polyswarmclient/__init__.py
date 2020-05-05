@@ -19,7 +19,6 @@ from polyswarmclient.request_rate_limit import RequestRateLimit
 
 logger = logging.getLogger(__name__)
 
-REQUEST_TIMEOUT = 5
 MAX_ARTIFACTS = 256
 RATE_LIMIT_SLEEP = 2.0
 
@@ -141,8 +140,7 @@ class Client(object):
             await self.liveness_recorder.start()
             # No limits on connections
             conn = aiohttp.TCPConnector(limit=0, limit_per_host=0)
-            timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
-            async with aiohttp.ClientSession(connector=conn, timeout=timeout) as self.__session:
+            async with aiohttp.ClientSession(connector=conn) as self.__session:
                 await self.create_sub_clients()
                 for chain in chains:
                     await self.bounties.fetch_parameters(chain)
@@ -214,9 +212,9 @@ class Client(object):
 
         asyncio.get_event_loop().create_task(periodic())
 
-    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ContentTypeError,
-                                RateLimitedError), default=(False, {}))
-    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError,
+    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ClientOSError,
+                                aiohttp.ContentTypeError, RateLimitedError), default=(False, {}))
+    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, aiohttp.ClientOSError,
                                              aiohttp.ContentTypeError, RateLimitedError), max_tries=2)
     async def make_request(self, method, path, chain, json=None, send_nonce=False, api_key=None, params=None):
         """Make a request to polyswarmd, expecting a json response
@@ -263,8 +261,9 @@ class Client(object):
 
                     try:
                         response = await raw.json()
-                    except ValueError:
+                    except aiohttp.ContentTypeError:
                         response = await raw.read() if raw else 'None'
+                        logger.warning('Got non-json response from polyswarmd', extra={'extra': response})
 
                     queries = '&'.join([a + '=' + str(b) for (a, b) in params.items()])
                     logger.debug('%s %s?%s', method, path, queries, extra={'extra': response})
@@ -277,7 +276,7 @@ class Client(object):
         except aiohttp.ContentTypeError:
             logger.exception('Received non-json response from polyswarmd: %s, url: %s', response, uri)
             raise
-        except (OSError, aiohttp.ServerDisconnectedError):
+        except (aiohttp.ClientOSError, aiohttp.ServerDisconnectedError):
             logger.error('Connection to polyswarmd refused')
             raise
         except asyncio.TimeoutError:
