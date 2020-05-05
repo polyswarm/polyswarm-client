@@ -290,7 +290,7 @@ class Client(object):
             raise
 
     async def list_artifacts(self, ipfs_uri, api_key=None):
-        """Return a list of artificats from a given ipfs_uri.
+        """Return a list of artifacts from a given ipfs_uri.
 
         Args:
             ipfs_uri (str): IPFS URI to get artifiacts from.
@@ -383,46 +383,6 @@ class Client(object):
     @staticmethod
     def from_wei(amount, unit='ether'):
         return w3.fromWei(amount, unit)
-
-    # Async iterator helper class
-    class __GetArtifacts(object):
-        def __init__(self, client, ipfs_uri, api_key=None):
-            self.i = 0
-            self.client = client
-            self.ipfs_uri = ipfs_uri
-            self.api_key = api_key
-
-        async def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            if not utils.is_valid_uri(self.ipfs_uri):
-                raise StopAsyncIteration
-
-            i = self.i
-            self.i += 1
-
-            if i < MAX_ARTIFACTS:
-                content = await self.client.get_artifact(self.ipfs_uri, i, api_key=self.api_key)
-                if content:
-                    return content
-
-            raise StopAsyncIteration
-
-    def get_artifacts(self, ipfs_uri, api_key=None):
-        """Get an iterator to return artifacts.
-
-        Args:
-            ipfs_uri (str): URI where artificats are located
-            api_key (str): Override default API key
-
-        Returns:
-            `__GetArtifacts` iterator
-        """
-        if self.__session is None or self.__session.closed:
-            raise Exception('Not running')
-
-        return Client.__GetArtifacts(self, ipfs_uri, api_key=api_key)
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError), default=None)
     @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError),
