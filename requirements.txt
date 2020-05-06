@@ -5,6 +5,7 @@ aioresponses==0.6.3
 aiorwlock==0.6.0
 backoff==1.10.0
 base58==2.0.0
+cachetools==4.1.0
 git+https://github.com/polyswarm/python-clamd.git@async#egg=clamd
 click==7.0
 dataclasses==0.7; python_version == '3.6'

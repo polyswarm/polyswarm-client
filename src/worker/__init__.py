@@ -138,7 +138,7 @@ class Worker:
 
     async def run_task(self):
         loop = asyncio.get_event_loop()
-        conn = aiohttp.TCPConnector(limit=0, limit_per_host=0)
+        conn = aiohttp.TCPConnector(limit=50)
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
         async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
             async for job in self.get_jobs():

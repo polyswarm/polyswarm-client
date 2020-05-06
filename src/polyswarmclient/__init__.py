@@ -138,8 +138,7 @@ class Client(object):
 
         try:
             await self.liveness_recorder.start()
-            # No limits on connections
-            conn = aiohttp.TCPConnector(limit=0, limit_per_host=0)
+            conn = aiohttp.TCPConnector(limit=50)
             async with aiohttp.ClientSession(connector=conn) as self.__session:
                 await self.create_sub_clients()
                 for chain in chains:

@@ -1,20 +1,33 @@
-import logging
-
 import backoff
+import cachetools
+import logging
+import os
 
 from polyswarmclient.ethereum.balanceclient import MAX_TRIES
 from polyswarmclient.exceptions import LowBalanceError
 
 logger = logging.getLogger(__name__)  # Initialize logger
 
+TTL = int(os.environ.get('BALANCE_TTL', 5 * 60))
+MAX_SIZE = 20
+
 
 class BalanceClient(object):
     def __init__(self, client):
         self.__client = client
+        self.cache = cachetools.TTLCache(ttl=TTL, maxsize=MAX_SIZE)
 
     @backoff.on_exception(backoff.expo, LowBalanceError, max_tries=MAX_TRIES)
     async def raise_for_low_balance(self, request_nct, chain):
-        balance = await self.get_nct_balance(chain)
+        key = f'{self.__client.account}:{chain}'
+        if key in self.cache:
+            logger.debug('Reading balance from cache')
+            balance = self.cache[key]
+        else:
+            logger.debug('Reading balance from database')
+            balance = await self.get_nct_balance(chain)
+            self.cache[key] = balance
+
         # If we don't have the balance, don't submit. Wait and try a few times, then skip
         if balance < request_nct:
             logger.critical('Insufficient balance to send transaction on %s. Have %s NCT. Need %s NCT.', chain,
