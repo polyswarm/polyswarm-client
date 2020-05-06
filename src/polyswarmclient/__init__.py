@@ -263,7 +263,7 @@ class Client(object):
                         response = await raw.json()
                     except aiohttp.ContentTypeError:
                         response = await raw.read() if raw else 'None'
-                        logger.warning('Got non-json response from polyswarmd', extra={'extra': response})
+                        raise
 
                     queries = '&'.join([a + '=' + str(b) for (a, b) in params.items()])
                     logger.debug('%s %s?%s', method, path, queries, extra={'extra': response})
