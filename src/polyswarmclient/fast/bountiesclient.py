@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from collections import Iterable
 
 from polyswarmartifact import ArtifactType
 from polyswarmclient.fast.transaction import PolySwarmTransactionRequest
@@ -221,20 +222,21 @@ class BountiesClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
+        try:
+            metadata = json.loads(metadata)
+        except (ValueError, json.JSONDecodeError) as e:
+            raise InvalidMetadataError from e
+
+        if isinstance(metadata, str) or not isinstance(metadata, Iterable):
+            metadata = [metadata]
+
         for verdict_mask, verdict_bid, verdict, verdict_metadata in zip(mask, bid, verdicts, metadata):
             if not verdict_mask:
                 continue
 
-            try:
-                verdict_metadata = json.loads(verdict_metadata)
-                if not isinstance(metadata, list):
-                    verdict_metadata = [verdict_metadata]
-
-                transaction = PostAssertionTransactionRequest(self.__client, bounty_guid, verdict_bid, verdict,
-                                                              verdict_metadata)
-                return 0, [await transaction.send(api_key=api_key)]
-            except (ValueError, json.JSONDecodeError) as e:
-                raise InvalidMetadataError from e
+            transaction = PostAssertionTransactionRequest(self.__client, bounty_guid, verdict_bid, verdict,
+                                                          verdict_metadata)
+            return 0, [await transaction.send(api_key=api_key)]
 
     async def post_reveal(self, bounty_guid, index, nonce, verdicts, metadata, chain, api_key=None):
         """Post an assertion reveal to polyswarmd.
