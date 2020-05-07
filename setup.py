@@ -29,7 +29,7 @@ setup(
         'dataclasses==0.7; python_version == "3.6"',
         'hexbytes==0.2.0',
         'jsonschema==3.2.0',
-        'polyswarm-artifact>=1.3.2',
+        'polyswarm-artifact>=1.3.3',
         'python-json-logger==0.1.11',
         'python-magic-bin==0.4.14;platform_system=="Windows"',
         'python-magic==0.4.15;platform_system=="Linux"',
