@@ -1,3 +1,5 @@
+import warnings
+
 import backoff
 import cachetools
 import logging
@@ -26,6 +28,9 @@ class BalanceClient(object):
         else:
             logger.debug('Reading balance from database')
             balance = await self.get_nct_balance(chain)
+            if balance == 0:
+                warnings.warn('Got 0 balance, pretending it is 1000 NCT')
+                balance = 1000 * 10 ** 18
             self.cache[key] = balance
 
         # If we don't have the balance, don't submit. Wait and try a few times, then skip
