@@ -25,6 +25,7 @@ setup(
         'aiorwlock==0.6.0',
         'backoff==1.10.0',
         'base58==2.0.0',
+        'cachetools==4.1.0',
         'click==7.0',
         'dataclasses==0.7; python_version == "3.6"',
         'hexbytes==0.2.0',
