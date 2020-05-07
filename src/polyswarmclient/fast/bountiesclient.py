@@ -212,7 +212,7 @@ class BountiesClient(object):
 
         Args:
             bounty_guid (str): The bounty to assert on
-            bid (int): The amount to bid
+            bid (List[int]): The amount to bid
             mask (List[bool]): Which artifacts in the bounty to assert on
             verdicts (List[bool]): Verdict (malicious/benign) for each of the artifacts in the bounty
             chain (str): Which chain to operate on
@@ -221,15 +221,20 @@ class BountiesClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
-        try:
-            metadata = json.loads(metadata)
-            if not isinstance(metadata, list):
-                metadata = [metadata]
+        for verdict_mask, verdict_bid, verdict, verdict_metadata in zip(mask, bid, verdicts, metadata):
+            if not verdict_mask:
+                continue
 
-            transaction = PostAssertionTransactionRequest(self.__client, bounty_guid, bid[0], verdicts[0], metadata[0])
-            return 0, [await transaction.send(api_key=api_key)]
-        except (ValueError, json.JSONDecodeError) as e:
-            raise InvalidMetadataError from e
+            try:
+                verdict_metadata = json.loads(verdict_metadata)
+                if not isinstance(metadata, list):
+                    verdict_metadata = [verdict_metadata]
+
+                transaction = PostAssertionTransactionRequest(self.__client, bounty_guid, verdict_bid, verdict,
+                                                              verdict_metadata)
+                return 0, [await transaction.send(api_key=api_key)]
+            except (ValueError, json.JSONDecodeError) as e:
+                raise InvalidMetadataError from e
 
     async def post_reveal(self, bounty_guid, index, nonce, verdicts, metadata, chain, api_key=None):
         """Post an assertion reveal to polyswarmd.
@@ -300,8 +305,10 @@ class BountiesClient(object):
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
-        transaction = PostVoteTransactionRequest(self.__client, bounty_guid, votes[0])
-        return await transaction.send(api_key=api_key)
+        if votes:
+            vote = votes[0]
+            transaction = PostVoteTransactionRequest(self.__client, bounty_guid, vote)
+            return await transaction.send(api_key=api_key)
 
     async def did_participate(self, bounty_guid, chain, api_key=None):
         """Check to see if this client participated in a bounty
