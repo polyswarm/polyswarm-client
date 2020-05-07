@@ -249,15 +249,6 @@ class AbstractMicroengine(object):
             assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
             arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
 
-            bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
-            try:
-                await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid), chain)
-            except LowBalanceError as e:
-                if self.client.tx_error_fatal:
-                    raise FatalError('Failed to assert on bounty due to low balance') from e
-
-                return []
-
             logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
             try:
                 nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain,

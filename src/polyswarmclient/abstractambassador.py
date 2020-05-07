@@ -198,19 +198,6 @@ class AbstractAmbassador(ABC):
             chain: Name of the chain to post to
         """
         async with self.client.liveness_recorder.waiting_task(bounty.ipfs_uri, self.last_block):
-            bounty_fee = await self.client.bounties.parameters[chain].get('bounty_fee')
-            try:
-                await self.client.balances.raise_for_low_balance(bounty.amount + bounty_fee, chain)
-            except LowBalanceError as e:
-                await self.on_bounty_post_failed(bounty.artifact_type, bounty.amount, bounty.ipfs_uri, bounty.duration,
-                                                 chain, metadata=bounty.metadata)
-                self.bounty_queues[chain].task_done()
-                self.bounty_semaphores[chain].release()
-                if self.client.tx_error_fatal:
-                    raise FatalError('Failed to post bounty due to low balance') from e
-                else:
-                    return
-
             assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
             arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
             metadata = None
