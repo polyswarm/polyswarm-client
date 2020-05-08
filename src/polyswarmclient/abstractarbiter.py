@@ -121,6 +121,7 @@ class AbstractArbiter(object):
         """
         self.bounties_pending_locks[chain] = asyncio.Lock()
 
+        await self.client.balances.get_nct_balance(chain)
         min_stake = await self.client.staking.parameters[chain].get('minimum_stake')
         staking_balance = await self.client.staking.get_total_balance(chain)
         if staking_balance < min_stake:
