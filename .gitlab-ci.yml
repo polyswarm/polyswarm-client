@@ -14,6 +14,11 @@ variables:
   DOCKER_HOST: tcp://localhost:2375/
   BASE_IMAGE_NAME: polyswarm-client-fast
 
+default:
+  before_script:
+    - pip install $END_TO_END_LIB@$CI_COMMIT_REF_NAME || pip install $END_TO_END_LIB
+    - e2e init
+
 ###############################################################
 # Build Stage (jobs inside a stage run in parallel)
 ###############################################################
@@ -23,10 +28,7 @@ build-linux:
   tags:
     - kube
   script:
-     # try to download a cache image
-     - docker pull $REPO_URL/$BASE_IMAGE_NAME:latest || true
-     # explicitly pull the latest version of the dependant image
-     - docker pull python:3.6-stretch
+     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
      - docker build
        -f docker/Dockerfile
        -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
@@ -57,8 +59,6 @@ e2e:
   tags:
     - kube
   script:
-    - pip install $END_TO_END_LIB@$CI_COMMIT_REF_NAME || pip install $END_TO_END_LIB
-    - e2e init
     - e2e run
 
 ###############################################################

@@ -1,6 +1,4 @@
-ARG MANUAL_IMAGE_TAG="latest"
-
-FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction:$MANUAL_IMAGE_TAG AS transaction
+FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction AS transaction
 
 FROM python:3.6-stretch
 LABEL maintainer="PolySwarm Developers <info@polyswarm.io>"
