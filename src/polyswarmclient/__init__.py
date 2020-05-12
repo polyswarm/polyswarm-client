@@ -326,9 +326,10 @@ class Client(object):
         return len(artifacts) if artifacts is not None and artifacts else 0
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ContentTypeError,
-                                RateLimitedError), default=None)
+                                RateLimitedError, aiohttp.ClientOSError), default=None)
     @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError,
-                                             aiohttp.ContentTypeError, RateLimitedError), max_tries=2)
+                                             aiohttp.ContentTypeError, aiohttp.ClientOSError, RateLimitedError),
+                          max_tries=2)
     async def get_artifact(self, ipfs_uri, index, api_key=None):
         """Retrieve an artifact from IPFS via polyswarmd
 
@@ -362,7 +363,7 @@ class Client(object):
 
                     if raw_response.status / 100 == 2:
                         return await raw_response.read()
-        except (OSError, aiohttp.ServerDisconnectedError):
+        except (aiohttp.ClientOSError, aiohttp.ServerDisconnectedError):
             logger.error('Connection to polyswarmd refused')
             raise
         except asyncio.TimeoutError:
@@ -382,8 +383,10 @@ class Client(object):
     def from_wei(amount, unit='ether'):
         return w3.fromWei(amount, unit)
 
-    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError), default=None)
-    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError),
+    @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError,
+                                aiohttp.ClientOSError), default=None)
+    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError,
+                                             aiohttp.ClientOSError),
                           max_tries=2)
     async def post_artifacts(self, files, api_key=None):
         """Post artifacts to polyswarmd, flexible files parameter to support different use-cases
@@ -444,7 +447,7 @@ class Client(object):
                                 response = await raw_response.read() if raw_response else 'None'
                                 logger.error('Received non-json response from polyswarmd: %s, uri: %s', response, uri)
                                 response = {}
-            except (OSError, aiohttp.ServerDisconnectedError):
+            except (aiohttp.ClientOSError, aiohttp.ServerDisconnectedError):
                 logger.error('Connection to polyswarmd refused, files: %s', files)
                 raise
             except asyncio.TimeoutError:
