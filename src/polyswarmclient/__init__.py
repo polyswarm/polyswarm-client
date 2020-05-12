@@ -3,6 +3,7 @@ import asyncio
 import backoff
 import json
 import logging
+import math
 import os
 import time
 import websockets
@@ -203,7 +204,7 @@ class Client(object):
         async def periodic():
             # FIXME PSC continues to hit a down polyswarmd, because the trigger is time, not blocks from websocket
             while True:
-                number = int(time.time())
+                number = int(math.floor(time.time()))
                 asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain='side'))
                 asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
                 asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain='side'))
