@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import time
 
 from abc import ABC, abstractmethod
@@ -32,7 +33,7 @@ class LivenessCheck(ABC):
         except LivenessReadError:
             return False
 
-        time_since_last_loop = int(time.time()) - liveness.last_iteration
+        time_since_last_loop = int(math.floor(time.time())) - liveness.last_iteration
         print('Last loop was {0} seconds ago, with an average wait of {1}'.format(time_since_last_loop, liveness.average_wait))
         return time_since_last_loop < self.loop_iteration_threshold and \
             liveness.average_wait < self.average_wait_threshold
@@ -82,7 +83,7 @@ class LivenessRecorder(ABC):
     async def advance_loop(self):
         """The loop is turning, and record the time of the latest iteration"""
         async with self.record_lock:
-            self.liveness.last_iteration = round(time.time())
+            self.liveness.last_iteration = int(math.floor(time.time()))
             await self.record()
 
     def waiting_task(self, key, start_time):
