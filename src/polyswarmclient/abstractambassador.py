@@ -381,4 +381,6 @@ class AbstractAmbassador(ABC):
         """
         Just debug log on empty queue.
         """
+        # Just a forced await to share
+        await asyncio.sleep(0)
         logger.debug('Queue empty, waiting for next window')
