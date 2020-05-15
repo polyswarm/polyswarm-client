@@ -1,5 +1,4 @@
 import asyncio
-import aiorwlock
 import logging
 
 
@@ -9,23 +8,20 @@ RATE_LIMIT_SLEEP = 2
 
 
 class RequestRateLimit:
-    rwlock: aiorwlock.RWLock
-    lock: asyncio.Lock
-    is_limited: bool
-
-    def __init__(self, rwlock, lock):
-        self.rwlock = rwlock
-        self.lock = lock
+    def __init__(self, event, lock):
         self.is_limited = False
+        self.rate_limit_event = event
+        self.lock = lock
 
     @classmethod
     async def build(cls):
-        rwlock = aiorwlock.RWLock()
+        event = asyncio.Event()
         lock = asyncio.Lock()
-        return cls(rwlock, lock)
+        event.set()
+        return cls(event, lock)
 
     async def check(self):
-        return self.rwlock.reader
+        await self.rate_limit_event.wait()
 
     async def trigger(self):
         """
@@ -43,5 +39,6 @@ class RequestRateLimit:
 
     async def limit(self):
         logger.debug('Rate limiting for %s seconds', RATE_LIMIT_SLEEP)
-        async with self.rwlock.writer:
-            await asyncio.sleep(RATE_LIMIT_SLEEP)
+        self.rate_limit_event.clear()
+        await asyncio.sleep(RATE_LIMIT_SLEEP)
+        self.rate_limit_event.set()

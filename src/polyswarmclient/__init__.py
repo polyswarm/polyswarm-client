@@ -56,7 +56,6 @@ class Client(object):
         self.account = w3.eth.account.from_key(self.priv_key).address
         logger.info('Using account: %s', self.account)
 
-        self.__session = None
         self.rate_limit = None
 
         # Do not init nonce manager here. Need to wait until we can guarantee that our event loop is set.
@@ -139,20 +138,17 @@ class Client(object):
 
         try:
             await self.liveness_recorder.start()
-            conn = aiohttp.TCPConnector(limit=50)
-            async with aiohttp.ClientSession(connector=conn) as self.__session:
-                await self.create_sub_clients()
-                for chain in chains:
-                    await self.bounties.fetch_parameters(chain)
-                    await self.staking.fetch_parameters(chain)
-                    await self.on_run.run(chain)
+            await self.create_sub_clients()
+            for chain in chains:
+                await self.bounties.fetch_parameters(chain)
+                await self.staking.fetch_parameters(chain)
+                await self.on_run.run(chain)
 
-                # At this point we're initialized, reset our failure counter and listen for events
-                self.tries = 0
-                if listen_for_events:
-                    await asyncio.wait([self.listen_for_events(chain) for chain in chains])
+            # At this point we're initialized, reset our failure counter and listen for events
+            self.tries = 0
+            if listen_for_events:
+                await asyncio.wait([self.listen_for_events(chain) for chain in chains])
         finally:
-            self.__session = None
             self.clear_sub_clients()
 
     def clear_sub_clients(self):
@@ -170,14 +166,16 @@ class Client(object):
             headers = {}
             if self.api_key:
                 headers.update({'Authorization': self.api_key})
-            async with self.__session.options(f'{self.polyswarmd_uri}/wallets/', headers=headers) as response:
-                if response.status == 404:
-                    logger.debug('Using ethereum sub-clients')
-                    self.create_ethereum_sub_clients()
-                    return
-                response.raise_for_status()
-            logger.debug('Using fast sub-clients')
-            self.create_fast_sub_clients()
+
+            async with aiohttp.ClientSession() as session:
+                async with session.options(f'{self.polyswarmd_uri}/wallets/', headers=headers) as response:
+                    if response.status == 404:
+                        logger.debug('Using ethereum sub-clients')
+                        self.create_ethereum_sub_clients()
+                        return
+                    response.raise_for_status()
+                logger.debug('Using fast sub-clients')
+                self.create_fast_sub_clients()
         except aiohttp.ClientConnectionError:
             logger.exception('Unable to connect to polyswarmd')
             raise
@@ -214,8 +212,6 @@ class Client(object):
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ClientOSError,
                                 aiohttp.ContentTypeError, RateLimitedError), default=(False, {}))
-    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, aiohttp.ClientOSError,
-                                             aiohttp.ContentTypeError, RateLimitedError), max_tries=2)
     async def make_request(self, method, path, chain, json=None, send_nonce=False, api_key=None, params=None):
         """Make a request to polyswarmd, expecting a json response
 
@@ -232,8 +228,6 @@ class Client(object):
         """
         if chain != 'home' and chain != 'side':
             raise ValueError(f'Chain parameter must be `home` or `side`, got {chain}')
-        if self.__session is None or self.__session.closed:
-            raise Exception('Not running')
 
         uri = f'{self.polyswarmd_uri}{path}'
         logger.debug('making request to url: %s', uri)
@@ -254,8 +248,9 @@ class Client(object):
 
         response = {}
         try:
-            async with await self.rate_limit.check():
-                async with self.__session.request(method, uri, params=params, headers=headers, json=json) as raw:
+            await self.rate_limit.check()
+            async with aiohttp.ClientSession() as session:
+                async with session.request(method, uri, params=params, headers=headers, json=json) as raw:
                     if raw.status == 429:
                         raise RateLimitedError
 
@@ -277,7 +272,7 @@ class Client(object):
             logger.exception('Received non-json response from polyswarmd: %s, url: %s', response, uri)
             raise
         except (aiohttp.ClientOSError, aiohttp.ServerDisconnectedError):
-            logger.error('Connection to polyswarmd refused')
+            logger.exception('Connection to polyswarmd refused')
             raise
         except asyncio.TimeoutError:
             logger.error('Connection to polyswarmd timed out')
@@ -328,9 +323,6 @@ class Client(object):
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ContentTypeError,
                                 RateLimitedError, aiohttp.ClientOSError), default=None)
-    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError,
-                                             aiohttp.ContentTypeError, aiohttp.ClientOSError, RateLimitedError),
-                          max_tries=2)
     async def get_artifact(self, ipfs_uri, index, api_key=None):
         """Retrieve an artifact from IPFS via polyswarmd
 
@@ -356,8 +348,9 @@ class Client(object):
             headers = {'Authorization': api_key}
 
         try:
-            async with await self.rate_limit.check():
-                async with self.__session.get(uri, params=params, headers=headers) as raw_response:
+            await self.rate_limit.check()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(uri, params=params, headers=headers) as raw_response:
                     # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
                     if raw_response.status == 429:
                         raise RateLimitedError
@@ -365,7 +358,7 @@ class Client(object):
                     if raw_response.status / 100 == 2:
                         return await raw_response.read()
         except (aiohttp.ClientOSError, aiohttp.ServerDisconnectedError):
-            logger.error('Connection to polyswarmd refused')
+            logger.exception('Connection to polyswarmd refused')
             raise
         except asyncio.TimeoutError:
             logger.error('Connection to polyswarmd timed out')
@@ -386,9 +379,6 @@ class Client(object):
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError,
                                 aiohttp.ClientOSError), default=None)
-    @backoff.on_exception(backoff.constant, (aiohttp.ServerDisconnectedError, asyncio.TimeoutError, RateLimitedError,
-                                             aiohttp.ClientOSError),
-                          max_tries=2)
     async def post_artifacts(self, files, api_key=None):
         """Post artifacts to polyswarmd, flexible files parameter to support different use-cases
 
@@ -435,9 +425,10 @@ class Client(object):
                     payload = aiohttp.payload.get_payload(f, content_type='application/octet-stream')
                     payload.set_content_disposition('form-data', name='file', filename=filename)
                     mpwriter.append_payload(payload)
-                    async with await self.rate_limit.check():
-                        # Make the request
-                        async with self.__session.post(uri, params=params, headers=headers,
+                    await self.rate_limit.check()
+                    # Make the request
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(uri, params=params, headers=headers,
                                                        data=mpwriter) as raw_response:
                             try:
                                 if raw_response.status == 429:
@@ -449,7 +440,7 @@ class Client(object):
                                 logger.error('Received non-json response from polyswarmd: %s, uri: %s', response, uri)
                                 response = {}
             except (aiohttp.ClientOSError, aiohttp.ServerDisconnectedError):
-                logger.error('Connection to polyswarmd refused, files: %s', files)
+                logger.exception('Connection to polyswarmd refused, files: %s', files)
                 raise
             except asyncio.TimeoutError:
                 logger.error('Connection to polyswarmd timed out, files: %s', files)

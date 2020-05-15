@@ -38,10 +38,6 @@ class NonceManager:
         self.nonce_lock = asyncio.Lock()
         self.update_lock = asyncio.Lock()
 
-    async def acquire(self):
-        """Acquires the nonce lock and updates base_nonce if needs_update is set"""
-        await self.nonce_lock.acquire()
-
     async def reserve(self, amount=1):
         """Grab the next amount nonces.
 
@@ -51,17 +47,16 @@ class NonceManager:
             (list[int]): a list of nonces to use
         """
         # Clear any waiting that should be used at this point
-        async with self:
-            async with self.update_lock:
-                needs_update = self.needs_update
-                overset = self.overset
-
-            if needs_update:
-                nonces = await self.sync_nonce(amount, overset)
-                # Since we acquire twice, we may overwrite changes, but we don't care since the nonce just synced
+        async with self.nonce_lock:
+            if self.needs_update:
                 async with self.update_lock:
-                    self.needs_update = False
-                    self.overset = False
+                    needs_update = self.needs_update
+
+                if needs_update:
+                    nonces = await self.sync_nonce(amount, self.overset)
+                    async with self.update_lock:
+                        self.needs_update = False
+                        self.overset = False
             else:
                 nonces = [r for r in range(self.base_nonce, self.base_nonce + amount)]
                 self.base_nonce = nonces[-1] + 1
@@ -190,12 +185,6 @@ class NonceManager:
             if not any(nonce for nonce in nonces if nonce in self.pending) and not self.needs_update:
                 self.needs_update = True
                 self.overset = True
-
-    async def __aenter__(self):
-        await self.acquire()
-
-    async def __aexit__(self, exc_type, exc, tb):
-        self.nonce_lock.release()
 
 
 # FIXME This needs to change to building transaction itself from the addresses before we can go live

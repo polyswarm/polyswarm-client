@@ -15,6 +15,8 @@ from polyswarmclient import Client
 
 
 # THE FOLLOWING KEY IS FOR TESTING PURPOSES ONLY
+from polyswarmclient.utils import asyncio_stop, asyncio_join
+
 TESTKEY = base64.b64decode(
     'eyJhZGRyZXNzIjoiZWNhZDBhZmNhYjgyZjhlNGExY2YwZTk1MjUyNjUzNzFiNTg2ZWZiZCIsImNy'
     'eXB0byI6eyJjaXBoZXIiOiJhZXMtMTI4LWN0ciIsImNpcGhlcnRleHQiOiJmZTczMWViYzllMDFh'
@@ -136,16 +138,10 @@ class MockClient(Client):
         else:
             raise ValueError('Invalid chain running')
 
-    async def run_task(self, chains=None, listen_for_events=True):
-        try:
-            return await super().run_task(chains, listen_for_events)
-        except asyncio.CancelledError:
-            pass
-
     async def wait_for_running(self):
         await asyncio.wait([self.home_init_done.wait(),  self.side_init_done.wait()])
 
-    async def start(self):
+    def start(self):
         self.http_mock.start()
         self.__ws_mock_manager.start()
 
@@ -185,12 +181,11 @@ class MockClient(Client):
             self.http_mock.get(self.url_with_parameters('/staking/parameters', chain='side'),
                                body=success(staking_parameters))
 
-        task = asyncio.get_event_loop().create_task(self.run_task())
-        await self.wait_for_running()
+        asyncio.get_event_loop().create_task(self.run_task({'side', 'home'}))
+        asyncio.get_event_loop().run_until_complete(self.wait_for_running())
 
         self.home_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events/?chain=home']
         self.side_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events/?chain=side']
-        return task
 
     def stop(self):
         self.http_mock.stop()
@@ -217,10 +212,11 @@ class MockClient(Client):
 
 
 @pytest.fixture()
-async def mock_client(event_loop):
+def mock_client(event_loop):
     asyncio.set_event_loop(event_loop)
     client = MockClient()
-    task = await client.start()
+    client.start()
     yield client
-    task.cancel()
     client.stop()
+    asyncio_stop()
+    asyncio_join()
