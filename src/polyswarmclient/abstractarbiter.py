@@ -213,6 +213,9 @@ class AbstractArbiter(object):
         results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
         votes = [result.verdict for result in results]
 
+        if any((not result.bit for result in results)):
+            return []
+
         bloom_parts = await self.client.bounties.get_bloom(guid, chain)
         bounty_bloom = 0
         for b in bloom_parts:
