@@ -363,3 +363,10 @@ kick-after-complete24:
   only:
     - master
   trigger: externalci/microengine-urlhaus
+  
+  
+kick-after-complete25:
+  stage: deployment
+  only:
+    - master
+  trigger: externalci/microengine-urlscanio
