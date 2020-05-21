@@ -1,13 +1,14 @@
 import asyncio
+import functools
 import logging
 import os
 import sys
+import tempfile
 import uuid
-
-from Crypto.Hash import keccak
 from concurrent.futures import ThreadPoolExecutor
 
 import base58
+from Crypto.Hash import keccak  # noqa
 
 logger = logging.getLogger(__name__)
 
@@ -139,3 +140,90 @@ def is_valid_ipfs_uri(ipfs_uri):
     except Exception as err:
         logger.exception('Unexpected error: %s', err)
     return False
+
+
+class AsyncArtifactTempfile:
+    """asynchronous ctxmgr for temporary artifacts
+
+    Notes::
+
+    The following underlying file's methods are awaited:
+
+        flush, peek, read, seek, write
+
+    You can use the object like an ordinary context manager
+    or supply the binary blob to be written as the first argument
+
+        >>> blob = b'hello world'
+        >>> async with AsyncArtifactTempfile(blob) as f:
+        >>>     with open(f.name, 'rb') as of:
+        >>>         of.read()
+        b'hello world'
+        >>> async with AsyncArtifactTempfile() as f:
+        >>>     await f.write(blob)
+        >>>     await f.read()
+        b'hello world'
+
+
+    The underlying file is always deleted after ctxmgr exits
+    """
+    def __init__(self, blob: 'bytes' = None, filename: 'str' = None, mode: 'str' = 'w+b'):
+        if not filename:
+            filename = os.path.join(tempfile.gettempdir(), f'artifact-{uuid.uuid4()}')
+        self.name = filename
+
+        flags = (
+            os.O_RDWR | # open fd for both reading and writing
+            os.O_CREAT | # create if doesn't already exist
+            getattr(os, 'O_BINARY', 0) | # WinNT requires this for binary files
+            getattr(os, 'O_SEQUENTIAL', 0) # optimize for (but don't require) sequential access
+        )
+
+        fd = os.open(self.name, flags, 0o666)
+        try:
+            self.file = open(fd, mode, buffering=0, closefd=True)
+        except:  # noqa
+            os.close(fd)
+
+        self.closed = False
+        self.blob = blob
+        self._loop = asyncio.get_event_loop()
+
+    async def run_in_loop(self, func, *args):
+        return await self._loop.run_in_executor(None, func, *args)
+
+    async def close(self):
+        if not self.closed:
+            try:
+                await self.run_in_loop(self.file.close)
+            finally:
+                self.closed = True
+                os.unlink(self.name)
+
+    def __del__(self):
+        if not self.closed:
+            self.file.close()
+
+    def __getattr__(self, name):
+        a = getattr(self.__dict__['file'], name)
+        if callable(a) and name in {'flush', 'peek', 'read', 'seek', 'write', 'truncate'}:
+            a = functools.partial(self.run_in_loop, a)
+        if not isinstance(a, int):
+            setattr(self, name, a)
+        return a
+
+    async def __aenter__(self):
+        await self.run_in_loop(self.file.__enter__)
+        if self.blob is not None:
+            await self.truncate()
+            written = await self.write(self.blob)
+            logger.info('wrote %d bytes to %s', written, self.name)
+            await self.seek(0)
+            self.blob = None
+        return self
+
+    # trap __aexit__ to ensure the file gets deleted when used in `async with`
+    async def __aexit__(self, exc, value, tb):
+        result = await self.run_in_loop(self.file.__exit__, exc, value, tb)
+        await self.close()
+        return result
