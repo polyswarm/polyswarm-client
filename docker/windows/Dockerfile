@@ -18,7 +18,7 @@ RUN iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.or
 
 ## -- Install polyswarm-client -----------
 COPY . C:/polyswarm/polyswarm-client
-RUN pip install -U pip; `
+RUN python -m pip install -U pip; `
     pip install                                       `
     --no-warn-script-location                         `
     -r C:/polyswarm/polyswarm-client/requirements.txt `
