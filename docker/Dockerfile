@@ -12,7 +12,7 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt ./
 
-RUN pip install -U pip \
+RUN pip install -U pip wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
