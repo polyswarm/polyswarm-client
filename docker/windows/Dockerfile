@@ -11,14 +11,15 @@ RUN iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.or
     ## Needed to build native extensions
     choco install -y git; `
     choco install -y vcbuildtools --version 2015.4; `
-    ## Install basic polyswarm python pkgs
+    ## Install python3
     choco install -y python --version 3.6.7; `
     ## -- Utilities ---------------------------
     choco install -y vim-console
 
 ## -- Install polyswarm-client -----------
 COPY . C:/polyswarm/polyswarm-client
-RUN pip install                                       `
+RUN python -m pip install -U pip wheel; `
+    pip install                                       `
     --no-warn-script-location                         `
     -r C:/polyswarm/polyswarm-client/requirements.txt `
     C:/polyswarm/polyswarm-client/; `

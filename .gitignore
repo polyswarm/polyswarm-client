@@ -2,6 +2,7 @@
 *.swp
 *.pyc
 venv/
+env/
 __pycache__/
 .pytest_cache
 .tox
