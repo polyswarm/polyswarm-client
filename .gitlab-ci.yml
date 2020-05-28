@@ -225,11 +225,6 @@ kick-after-complete1:
     - master
   trigger: externalci/microengine-ikarus
 
-kick-after-complete2:
-  stage: deployment
-  only:
-    - master
-  trigger: externalci/microengine-trustlook
 kick-after-complete3:
   stage: deployment
   only:
@@ -276,12 +271,6 @@ kick-after-complete10:
     - master
   trigger: externalci/microengine-nucleon
 
-kick-after-complete11:
-  stage: deployment
-  only:
-    - master
-  trigger: externalci/microengine-spamhaus
-
 kick-after-complete12:
   stage: deployment
   only:
@@ -309,12 +298,6 @@ kick-after-complete15:
   only:
     - master
   trigger: externalci/microengine-crowdstrike-falcon
-
-kick-after-complete16:
-  stage: deployment
-  only:
-    - master
-  trigger: externalci/microengine-malwarepatrol
 
 kick-after-complete17:
   stage: deployment
