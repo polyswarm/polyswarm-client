@@ -71,7 +71,9 @@ def choose_backend(backend):
               help='Activate testing mode for integration testing, respond to N bounties and N offers then exit')
 @click.option('--log-format', default='text',
               help='Log format. Can be `json` or `text` (default)')
-def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format):
+@click.option('--scan_time_requirement', envvar='SCAN_TIME_REQUIREMENT', default=3,
+              help="Minimum number of seconds this engine requires to scan a file; artifacts with less time remaining will be ignored")
+def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format, scan_time_requirement):
     """Entrypoint for the worker driver
     """
     if tasks != 0:
@@ -91,7 +93,7 @@ def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, sca
     init_logging(['polyswarmclient'], log_format, clientlevel)
 
     logger.info('Running worker with %s tasks', tasks if tasks > 0 else 'unlimited')
-    worker = Worker(redis_addr, queue, tasks, download_limit, scan_limit, api_key, testing, scanner)
+    worker = Worker(redis_addr, queue, tasks, download_limit, scan_limit, api_key, testing, scanner, scan_time_requirement)
     worker.run()
 
 

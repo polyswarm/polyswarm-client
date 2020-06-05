@@ -49,13 +49,14 @@ class OptionalSemaphore(asyncio.Semaphore):
 
 class Worker:
     def __init__(self, redis_addr, queue, task_count=0, download_limit=0, scan_limit=0, api_key=None, testing=0,
-                 scanner=None):
+                 scanner=None, scan_time_requirement=0):
         self.redis_uri = 'redis://' + redis_addr
         self.redis = None
         self.queue = queue
         self.api_key = api_key
         self.testing = testing
         self.scanner = scanner
+        self.scan_time_requirement = scan_time_requirement
         self.max_task_count = task_count
         self.current_task_count = 0
         self.task_count_lock = None
@@ -200,10 +201,9 @@ class Worker:
                 self.current_task_count -= 1
                 self.task_count_lock.notify()
 
-    @staticmethod
-    def get_remaining_time(job: JobRequest) -> int:
+    def get_remaining_time(self, job: JobRequest) -> int:
         remaining_time = int(job.ts + job.duration - math.floor(time.time()))
-        if remaining_time < 0:
+        if remaining_time - self.scan_time_requirement < 0:
             raise ExpiredException()
         return remaining_time
 

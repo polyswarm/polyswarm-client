@@ -130,7 +130,7 @@ class Producer:
                                  index=i,
                                  uri=uri,
                                  artifact_type=artifact_type.value,
-                                 duration=duration,
+                                 duration=timeout,
                                  metadata=metadata[i],
                                  chain=chain,
                                  ts=int(time.time()))
