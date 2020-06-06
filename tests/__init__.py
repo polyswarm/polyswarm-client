@@ -19,7 +19,8 @@ def event(event, data, block_number=0, txhash='0x0'):
 
 
 def random_address():
-    return Web3().toChecksumAddress(os.urandom(20).hex())
+    s = Web3().toChecksumAddress(os.urandom(20).hex())
+    return s.decode() if isinstance(s, (bytes, bytearray)) else s
 
 
 def random_bitset():
@@ -28,4 +29,5 @@ def random_bitset():
 
 
 def random_ipfs_uri():
-    return base58.b58encode(b'\x12' + os.urandom(32))
+    s = base58.b58encode(b'\x12' + os.urandom(32))
+    return s.decode() if isinstance(s, (bytes, bytearray)) else s
