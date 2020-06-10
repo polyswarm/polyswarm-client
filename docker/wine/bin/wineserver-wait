@@ -1,0 +1,20 @@
+#!/bin/bash
+declare -i WAITTIME=10
+while getopts "hvk:" opt; do
+    case ${opt} in
+        k ) WAITTIME=$OPTARG ;;
+        v ) set -x ;;
+        h ) echo "$0 -v -k=N"; exit 0 ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+if pgrep -x wineserver; then
+    pkill -x -INT wineserver
+    pkill -x -TERM wineserver
+    ( sleep "$WAITTIME" && pkill -x -KILL wineserver )&
+    while pgrep -x wineserver; do sleep 1; done
+    kill $(jobs -p)
+fi
+
+exit 0

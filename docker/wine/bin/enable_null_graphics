@@ -1,0 +1,17 @@
+#!/bin/sh
+
+enable_null_graphics () 
+{
+    tmpfile=$(mktemp)
+    cat <<EOF
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Wine\Drivers]
+"Graphics"="x11"
+    EOF >! "$tmpfile"
+    exec regedit "$tmpfile"
+    exit $?
+}
+
+
+enable_null_graphics

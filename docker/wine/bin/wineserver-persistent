@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/bin/wineserver -d0 -p30 "${1+$@}"

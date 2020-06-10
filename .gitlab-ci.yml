@@ -6,6 +6,7 @@ services:
 stages:
   - build
   - test
+  - wine
   - e2e
   - release
   - deployment
@@ -31,6 +32,7 @@ build-linux:
     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
     - docker build
       -f docker/Dockerfile
+      -t polyswarm-client
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_REF_SLUG
       --cache-from=$REPO_URL/$BASE_IMAGE_NAME:latest
@@ -56,6 +58,21 @@ build-windows:
       .
     - docker push $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA
     - docker push $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_REF_SLUG
+
+build-wine:
+  needs: build-linux
+  stage: wine
+  tags:
+    - kube
+  script:
+    - docker build
+      -f docker/wine/Dockerfile
+      -t $REPO_URL/$BASE_IMAGE_NAME-wine:$CI_COMMIT_SHA
+      -t $REPO_URL/$BASE_IMAGE_NAME-wine:$CI_COMMIT_REF_SLUG
+      --cache-from=$REPO_URL/$BASE_IMAGE_NAME-wine:latest
+      docker/wine/
+    - docker push $REPO_URL/$BASE_IMAGE_NAME-wine:$CI_COMMIT_SHA
+    - docker push $REPO_URL/$BASE_IMAGE_NAME-wine:$CI_COMMIT_REF_SLUG
 
 ###############################################################
 # Test Stage
