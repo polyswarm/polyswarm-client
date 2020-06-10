@@ -60,7 +60,7 @@ build-windows:
     - docker push $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_REF_SLUG
 
 build-wine:
-  needs: build-linux
+  needs: ["build-linux"]
   stage: wine
   tags:
     - kube
