@@ -6,54 +6,12 @@ import operator
 from web3 import Web3
 
 FILTER_BITS = 8 * 256
+assert FILTER_BITS <= (1 << 16)  # Has to be a short, basically
+
 HASH_FUNCS = 8
 
+
 logger = logging.getLogger(__name__)  # Initialize logger
-
-
-def get_chunks_for_bloom(value_hash):
-    """
-    Bloom filter helper function. Turn a value hash into
-    a series of chunks.
-
-    Args:
-        value_hash (bytes): Hash of to be encoded into the Bloom filter.
-    Yields:
-        chunk (bytes): Chunks of the value hash.
-    """
-    assert HASH_FUNCS * 2 <= len(value_hash)
-    for i in range(0, HASH_FUNCS):
-        yield value_hash[2 * i:2 * (i + 1)]
-
-
-def chunk_to_bloom_bits(chunk):
-    """
-    Bloom filter helper function. Turn a chunk into a series of
-    actual bytes.
-
-    Args:
-        chunk (bytes): Byte encoded chunk.
-    """
-    assert FILTER_BITS <= (1 << 16)
-    high, low = bytearray(chunk)
-    return 1 << ((low + (high << 8)) & (FILTER_BITS - 1))
-
-
-def get_bloom_bits(value):
-    """
-    Bloom filter helper function. Get the Bloom bits of a
-    given value.
-
-    Args:
-        value (bytes): Value to be encoded into the Bloom filter.
-    """
-    # Could decode the ipfs_hash and use it as is, but instead hash the
-    # multihash representation to side-step different hash formats going
-    # forward. Should rexamine this decision
-    value_hash = Web3.keccak(value)
-    for chunk in get_chunks_for_bloom(value_hash):
-        bloom_bits = chunk_to_bloom_bits(chunk)
-        yield bloom_bits
 
 
 class BloomFilter(numbers.Number):
@@ -75,7 +33,7 @@ class BloomFilter(numbers.Number):
         """
         if not isinstance(value, bytes):
             raise TypeError('Value must be of type `bytes`')
-        for bloom_bits in get_bloom_bits(value):
+        for bloom_bits in self.get_bloom_bits(value):
             self.value |= bloom_bits
 
     def extend(self, iterable):
@@ -108,7 +66,7 @@ class BloomFilter(numbers.Number):
         return all(
             self.value & bloom_bits
             for bloom_bits
-            in get_bloom_bits(value)
+            in self.get_bloom_bits(value)
         )
 
     def __index__(self):
@@ -140,3 +98,49 @@ class BloomFilter(numbers.Number):
 
     def __iadd__(self, other):
         return self._icombine(other)
+
+    @staticmethod
+    def get_bloom_bits(value):
+        """
+        Bloom filter helper function. Get the Bloom bits of a
+        given value.
+
+        Args:
+            value (bytes): Value to be encoded into the Bloom filter.
+        """
+        # Could decode the ipfs_hash and use it as is, but instead hash the
+        # multihash representation to side-step different hash formats going
+        # forward. Should rexamine this decision
+        value_hash = Web3.keccak(value)
+        for chunk in BloomFilter.get_chunks_for_bloom(value_hash):
+            bloom_bits = BloomFilter.chunk_to_bloom_bits(chunk)
+            yield bloom_bits
+
+    @staticmethod
+    def get_chunks_for_bloom(value_hash):
+        """
+        Bloom filter helper function. Turn a value hash into
+        a series of chunks.
+
+        Args:
+            value_hash (bytes): Hash of to be encoded into the Bloom filter.
+        Yields:
+            chunk (bytes): Chunks of the value hash.
+        """
+        if HASH_FUNCS * 2 > len(value_hash):
+            raise ValueError("Input is too long ")
+
+        for i in range(0, HASH_FUNCS):
+            yield value_hash[2 * i:2 * (i + 1)]
+
+    @staticmethod
+    def chunk_to_bloom_bits(chunk):
+        """
+        Bloom filter helper function. Turn a chunk into a series of
+        actual bytes.
+
+        Args:
+            chunk (bytes): Byte encoded chunk.
+        """
+        high, low = bytearray(chunk)
+        return 1 << ((low + (high << 8)) & (FILTER_BITS - 1))

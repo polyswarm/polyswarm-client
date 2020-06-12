@@ -94,7 +94,6 @@ class LocalLivenessRecorder(LivenessRecorder):
         """ Write the given content to the file at the given path.
 
         Args:
-            path: file path to write to
             content: content to write into the file
         """
         with open(self.path, 'w') as f:

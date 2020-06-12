@@ -75,7 +75,7 @@ class BountiesClient(object):
         Returns:
             Bloom filter value for the artifact set
         """
-        []
+        return []
 
     async def get_bloom(self, bounty_guid, chain, api_key=None):
         """
@@ -161,13 +161,8 @@ class BountiesClient(object):
         except json.JSONDecodeError:
             metadata = {}
         guid = uuid.uuid4()
-        transaction = PostBountyTransactionRequest(self.__client,
-                                                   str(guid),
-                                                   amount,
-                                                   artifact_uri,
-                                                   artifact_type.value,
-                                                   duration,
-                                                   metadata)
+        transaction = PostBountyTransactionRequest(self.__client, str(guid), amount, artifact_uri, artifact_type.value,
+                                                   duration, metadata)
         result = await transaction.send(api_key=api_key)
         return [result]
 

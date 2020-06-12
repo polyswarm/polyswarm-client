@@ -104,6 +104,7 @@ class Client(object):
         if chains is None:
             chains = {'home', 'side'}
 
+        # noinspection PyBroadException
         try:
             asyncio.get_event_loop().run_until_complete(self.run_task(chains=chains))
         except asyncio.CancelledError:
@@ -120,6 +121,7 @@ class Client(object):
 
         Args:
             chains (set(str)): Set of chains to operate on. Defaults to {'home', 'side'}
+            listen_for_events (bool): Whether or not to listen to the websocket for events
         """
         self.params = {'account': self.account}
         if chains is None:
@@ -199,7 +201,7 @@ class Client(object):
         self.relay = RelayClient(self)
         self.balances = BalanceClient(self)
 
-        async def periodic(chains):
+        async def periodic():
             # FIXME PSC continues to hit a down polyswarmd, because the trigger is time, not blocks from websocket
             while True:
                 number = int(math.floor(time.time()))
@@ -210,7 +212,7 @@ class Client(object):
                 asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
                 await asyncio.sleep(1)
 
-        asyncio.get_event_loop().create_task(periodic(chains))
+        asyncio.get_event_loop().create_task(periodic())
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ClientOSError,
                                 aiohttp.ContentTypeError, RateLimitedError), default=(False, {}))
@@ -431,11 +433,11 @@ class Client(object):
                     # Make the request
                     async with aiohttp.ClientSession() as session:
                         async with session.post(uri, params=params, headers=headers,
-                                                       data=mpwriter) as raw_response:
-                            try:
-                                if raw_response.status == 429:
-                                    raise RateLimitedError
+                                                data=mpwriter) as raw_response:
+                            if raw_response.status == 429:
+                                raise RateLimitedError
 
+                            try:
                                 response = await raw_response.json()
                             except (ValueError, aiohttp.ContentTypeError):
                                 response = await raw_response.read() if raw_response else 'None'

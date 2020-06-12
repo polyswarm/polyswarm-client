@@ -10,8 +10,6 @@ import uuid
 from web3 import Web3
 from concurrent.futures import ThreadPoolExecutor
 
-from Crypto.Hash import keccak  # noqa
-
 logger = logging.getLogger(__name__)
 
 TASK_TIMEOUT = 1.0
