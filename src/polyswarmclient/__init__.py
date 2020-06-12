@@ -138,7 +138,7 @@ class Client(object):
 
         try:
             await self.liveness_recorder.start()
-            await self.create_sub_clients()
+            await self.create_sub_clients(chains)
             for chain in chains:
                 await self.bounties.fetch_parameters(chain)
                 await self.staking.fetch_parameters(chain)
@@ -159,7 +159,7 @@ class Client(object):
         self.staking = None
 
     @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=3)
-    async def create_sub_clients(self):
+    async def create_sub_clients(self, chains):
         # Test polyswarmd, then either load ethereum or fast
         try:
             # Wallets only exists in polyswarmd-fast
@@ -171,11 +171,11 @@ class Client(object):
                 async with session.options(f'{self.polyswarmd_uri}/wallets/', headers=headers) as response:
                     if response.status == 404:
                         logger.debug('Using ethereum sub-clients')
-                        self.create_ethereum_sub_clients()
+                        self.create_ethereum_sub_clients(chains)
                         return
                     response.raise_for_status()
                 logger.debug('Using fast sub-clients')
-                self.create_fast_sub_clients()
+                self.create_fast_sub_clients(chains)
         except aiohttp.ClientConnectionError:
             logger.exception('Unable to connect to polyswarmd')
             raise
@@ -183,7 +183,7 @@ class Client(object):
             logger.exception('Timeout connecting to polyswarmd')
             raise
 
-    def create_ethereum_sub_clients(self):
+    def create_ethereum_sub_clients(self, chains):
         from polyswarmclient.ethereum import BalanceClient,  BountiesClient, StakingClient, OffersClient, RelayClient
         self.bounties = BountiesClient(self)
         self.staking = StakingClient(self)
@@ -191,7 +191,7 @@ class Client(object):
         self.relay = RelayClient(self)
         self.balances = BalanceClient(self)
 
-    def create_fast_sub_clients(self):
+    def create_fast_sub_clients(self, chains):
         from polyswarmclient.fast import BalanceClient,  BountiesClient, StakingClient, OffersClient, RelayClient
         self.bounties = BountiesClient(self)
         self.staking = StakingClient(self)
@@ -199,16 +199,18 @@ class Client(object):
         self.relay = RelayClient(self)
         self.balances = BalanceClient(self)
 
-        async def periodic():
+        async def periodic(chains):
             # FIXME PSC continues to hit a down polyswarmd, because the trigger is time, not blocks from websocket
             while True:
                 number = int(math.floor(time.time()))
-                asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain='side'))
+                for chain in chains:
+                    asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain=chain))
+                    asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain=chain))
+
                 asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
-                asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain='side'))
                 await asyncio.sleep(1)
 
-        asyncio.get_event_loop().create_task(periodic())
+        asyncio.get_event_loop().create_task(periodic(chains))
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ClientOSError,
                                 aiohttp.ContentTypeError, RateLimitedError), default=(False, {}))
