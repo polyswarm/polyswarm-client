@@ -11,7 +11,7 @@ def requirements_entries(*entries) -> 'List[str]':
     """Returns a list of requirements matching each 'entries'"""
     reqs = [r.strip()
             for f in (Path('requirements.txt'), Path('requirements-test.txt'))
-            for r in f.read_text().split_lines() if not r.startswith('#')]
+            for r in f.read_text().splitlines() if not r.startswith('#')]
     return [
         # find line starting w/ `entry` followed by any non-word char except . & -.
         next(filter(re.compile('^' + re.escape(entry) + r'\b(?![-.])').match, reqs))
