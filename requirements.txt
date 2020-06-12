@@ -15,7 +15,7 @@ pycryptodome>=3.9.7
 python-json-logger==0.1.9
 python-magic-bin==0.4.14;platform_system=="Windows"
 python-magic==0.4.15;platform_system=="Linux"
-requests==2.22.0
-web3==4.8.2
+requests==2.23.0
+web3==5.6.0
 websockets==6.0
 yara-python==4.0.1
