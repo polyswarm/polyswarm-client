@@ -15,10 +15,10 @@ RUN apt-get update -y \
         tar bzip2 xz-utils ncompress \
         gcc libc-dev pkg-config make file \
         git-core \
-        curl
+        wget
 
 ARG DOCKERIZE_VERSION=v0.6.1
-RUN curl -L "http://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz" \
+RUN wget -qO - "http://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz" \
   | tar -xz -C /usr/local/bin
 
 WORKDIR /usr/src/app
