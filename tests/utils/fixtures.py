@@ -3,14 +3,20 @@ import base64
 import pytest
 import tempfile
 import sys
-
-from . import success
+import base58
+import json
+import random
+import os
+from web3 import Web3
 from aioresponses import aioresponses
 from asynctest.mock import patch
+
 from polyswarmclient import Client
-from polyswarmclient.utils import asyncio_stop
+
 
 # THE FOLLOWING KEY IS FOR TESTING PURPOSES ONLY
+from polyswarmclient.utils import asyncio_stop, asyncio_join
+
 TESTKEY = base64.b64decode(
     'eyJhZGRyZXNzIjoiZWNhZDBhZmNhYjgyZjhlNGExY2YwZTk1MjUyNjUzNzFiNTg2ZWZiZCIsImNy'
     'eXB0byI6eyJjaXBoZXIiOiJhZXMtMTI4LWN0ciIsImNpcGhlcnRleHQiOiJmZTczMWViYzllMDFh'
@@ -23,6 +29,31 @@ TESTKEY = base64.b64decode(
     'NGUwLThmMTAtOGU5MzI4OTM3NjZmIiwidmVyc2lvbiI6M30=')
 
 TESTKEY_PASSWORD = 'password'
+
+
+def success(result):
+    return json.dumps({'status': 'OK', 'result': result})
+
+
+def failure(errors):
+    return json.dumps({'status': 'FAIL', 'errors': errors})
+
+
+def event(event, data, block_number=0, txhash='0x0'):
+    return json.dumps({'event': event, 'data': data, 'block_number': block_number, 'txhash': txhash})
+
+
+def random_address():
+    return Web3().toChecksumAddress(os.urandom(20).hex())
+
+
+def random_bitset():
+    x = random.getrandbits(256)
+    return [(1 << i) & x != 0 for i in range(256)]
+
+
+def random_ipfs_uri():
+    return base58.b58encode(b'\x12' + os.urandom(32)).decode('utf-8')
 
 
 class WebsocketMockManager(object):
@@ -68,7 +99,6 @@ class WebsocketMock(object):
 
     def close(self):
         self.closed = True
-        self.queue.put_nowait(None)
 
     async def recv(self):
         return await self.queue.get()
@@ -109,13 +139,14 @@ class MockClient(Client):
             raise ValueError('Invalid chain running')
 
     async def wait_for_running(self):
-        await asyncio.wait([self.home_init_done.wait(), self.side_init_done.wait()])
+        await asyncio.wait([self.home_init_done.wait(),  self.side_init_done.wait()])
 
     def start(self):
         self.http_mock.start()
         self.__ws_mock_manager.start()
 
         # This is needed to get us through initialization
+        self.http_mock.options('http://localhost/wallets/', status=404)
         self.http_mock.get(self.url_with_parameters('/nonce', chain='home'), body=success(0))
         self.http_mock.get(self.url_with_parameters('/nonce', chain='side'), body=success(0))
 
@@ -150,17 +181,15 @@ class MockClient(Client):
             self.http_mock.get(self.url_with_parameters('/staking/parameters', chain='side'),
                                body=success(staking_parameters))
 
-        asyncio.get_event_loop().create_task(self.run_task())
+        asyncio.get_event_loop().create_task(self.run_task({'side', 'home'}))
         asyncio.get_event_loop().run_until_complete(self.wait_for_running())
 
-        self.home_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events?chain=home']
-        self.side_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events?chain=side']
+        self.home_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events/?chain=home']
+        self.side_ws_mock = self.__ws_mock_manager.open_sockets['ws://localhost/events/?chain=side']
 
     def stop(self):
         self.http_mock.stop()
         self.__ws_mock_manager.stop()
-
-        asyncio_stop()
 
     def __enter__(self):
         self.start()
@@ -189,3 +218,5 @@ def mock_client(event_loop):
     client.start()
     yield client
     client.stop()
+    asyncio_stop()
+    asyncio_join()

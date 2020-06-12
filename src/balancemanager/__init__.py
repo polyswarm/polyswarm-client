@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from polyswarmclient.utils import asyncio_stop, configure_event_loop
+import polyswarmclient.fast.bountiesclient
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,11 @@ class BalanceManager(object):
         """
         Just starts the transfer up async.
         """
+        # Do nothing when talking to polyswarmd-fast
+        if isinstance(self.client.bounties, polyswarmclient.fast.bountiesclient.BountiesClient):
+            self.exit_code = 0
+            return
+
         if self.testing > 0:
             for i in range(0, self.testing):
                 logger.info('Transferred %s times of %s', i, self.testing)
@@ -315,6 +321,10 @@ class Maintainer(object):
         Stores the latest block and then kicks off some balance checks.
         If the balance is outside the given range, it deposits, or withdraws as needed.
         """
+        # Do nothing when talking to polyswarmd-fast
+        if isinstance(self.client.bounties, polyswarmclient.fast.bountiesclient.BountiesClient):
+            return
+
         if chain == 'side':
             return
 

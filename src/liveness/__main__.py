@@ -4,6 +4,7 @@ import sys
 import warnings
 
 from polyswarmclient.config import init_logging
+from polyswarmclient.exceptions import FatalError
 from polyswarmclient.liveness.local import LocalLivenessCheck
 
 
@@ -24,11 +25,12 @@ def main(log, log_format, loop_update_threshold, average_bounty_wait_threshold):
     loglevel = getattr(logging, log.upper(), None)
     if not isinstance(loglevel, int):
         logging.error('invalid log level')
-        sys.exit(-1)
+        raise FatalError('Invalid log level', 1)
 
     init_logging(['liveness'], log_format, loglevel)
     liveness_check = LocalLivenessCheck(loop_update_threshold, average_bounty_wait_threshold)
-    sys.exit(0 if liveness_check.check() else -1)
+    if not liveness_check.check():
+        raise FatalError('Liveness check failed', 1)
 
 
 if __name__ == '__main__':

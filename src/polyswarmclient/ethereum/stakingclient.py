@@ -1,14 +1,14 @@
 import logging
 
 from polyswarmclient.parameters import Parameters
-from polyswarmclient.verifiers import StakingDepositVerifier, StakingWithdrawVerifier, \
+from polyswarmclient.ethereum.verifiers import StakingDepositVerifier, StakingWithdrawVerifier, \
     NctApproveVerifier
-from polyswarmclient.transaction import AbstractTransaction
+from polyswarmclient.ethereum.transaction import EthereumTransaction
 
 logger = logging.getLogger(__name__)
 
 
-class StakeDepositTransaction(AbstractTransaction):
+class StakeDepositTransaction(EthereumTransaction):
     def __init__(self, client, amount):
         self.amount = amount
         approve = NctApproveVerifier(amount)
@@ -32,7 +32,7 @@ class StakeDepositTransaction(AbstractTransaction):
         return False
 
 
-class StakeWithdrawTransaction(AbstractTransaction):
+class StakeWithdrawTransaction(EthereumTransaction):
     def __init__(self, client, amount):
         self.amount = amount
         withdraw = StakingWithdrawVerifier(amount)

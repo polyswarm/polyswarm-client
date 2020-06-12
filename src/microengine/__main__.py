@@ -1,11 +1,12 @@
 import click
 import importlib.util
 import logging
-import sys
+import warnings
 
 from polyswarmartifact import ArtifactType
 
 from polyswarmclient.config import init_logging, validate_apikey
+from polyswarmclient.exceptions import FatalError
 from polyswarmclient.filters.bountyfilter import split_filter, FilterComparison, BountyFilter
 from polyswarmclient.filters.confidencefilter import ConfidenceModifier
 from polyswarmclient.filters.filter import parse_filters
@@ -140,7 +141,7 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
     clientlevel = getattr(logging, client_log.upper(), None)
     if not isinstance(loglevel, int) or not isinstance(clientlevel, int):
         logging.error('invalid log level')
-        sys.exit(-1)
+        raise FatalError('Invalid log level', 1)
 
     logger_name, microengine_class = choose_backend(backend)
     bid_logger_name, bid_strategy_class = choose_bid_strategy(bid_strategy)
@@ -155,9 +156,8 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
     filter_accept = filter.get('accept', [])
     filter_reject = filter.get('reject', [])
     if accept or exclude:
-        logger.warning('Options `--exclude|accept key:value` are deprecated, please switch to `--filter '
-                       'accept|reject key comparison value`')
-
+        warnings.warn('Options `--exclude|accept key:value` are deprecated, please switch to'
+                      ' `--filter accept|reject key comparison value`', DeprecationWarning)
         filter_accept.extend(accept)
         filter_reject.extend(exclude)
 

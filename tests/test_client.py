@@ -5,13 +5,11 @@ from polyswarmartifact import ArtifactType
 import polyswarmclient
 import random
 import uuid
-from os import urandom
 
 from unittest.mock import patch
 
-import polyswarmclient.transaction
 import polyswarmclient.utils
-from . import success, event, random_address, random_bitset, random_ipfs_uri
+from .utils.fixtures import success, event, random_address, random_bitset, random_ipfs_uri, mock_client
 
 
 def test_check_response():
@@ -25,12 +23,31 @@ def test_check_response():
     assert not polyswarmclient.utils.check_response(invalid_response)
 
 
+def test_is_valid_sha256():
+    invalid_sha256 = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
+    assert not polyswarmclient.utils.is_valid_sha256(invalid_sha256)
+
+    valid_sha256 = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f'
+    assert polyswarmclient.utils.is_valid_sha256(valid_sha256)
+
+
 def test_is_valid_ipfs_uri():
-    invalid_ipfs_uri = '#!$!'
+    invalid_ipfs_uri = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f'
     assert not polyswarmclient.utils.is_valid_ipfs_uri(invalid_ipfs_uri)
 
     valid_ipfs_uri = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
     assert polyswarmclient.utils.is_valid_ipfs_uri(valid_ipfs_uri)
+
+
+def test_is_valid_uri():
+    invalid_uri = '#!$!'
+    assert not polyswarmclient.utils.is_valid_uri(invalid_uri)
+
+    valid_ipfs_uri = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
+    assert polyswarmclient.utils.is_valid_uri(valid_ipfs_uri)
+
+    valid_sha256 = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f'
+    assert polyswarmclient.utils.is_valid_uri(valid_sha256)
 
 
 @patch('os.urandom', return_value=0x41)
@@ -44,11 +61,12 @@ def test_calculate_commitment(mock_fn):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(15)
 async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='home'), body=success(42))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='home'), body=success([]))
-
-    home = polyswarmclient.transaction.NonceManager(mock_client, 'home')
+    home = mock_client.nonce_managers['home']
+    await home.setup()
     await home.reserve(1)
 
     assert home.base_nonce == 43
@@ -56,13 +74,15 @@ async def test_update_base_nonce(mock_client):
     mock_client.http_mock.get(mock_client.url_with_parameters('/nonce', params={'ignore_pending': ' '}, chain='side'), body=success(1336))
     mock_client.http_mock.get(mock_client.url_with_parameters('/pending', chain='side'), body=success([]))
 
-    side = polyswarmclient.transaction.NonceManager(mock_client, 'side')
+    side = mock_client.nonce_managers['side']
+    await side.setup()
     await side.reserve(1)
 
     assert side.base_nonce == 1337
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(15)
 async def test_list_artifacts(mock_client):
     invalid_ipfs_uri = '#!$!'
     assert await mock_client.list_artifacts(invalid_ipfs_uri) == []
@@ -73,7 +93,7 @@ async def test_list_artifacts(mock_client):
         {'hash': 'QmYCvbfNbCwFR45HiNP45rwJgvatpiW38D961L5qAhUM5Y', 'name': 'contact'},
     ]
 
-    mock_client.http_mock.get(mock_client.url_with_parameters('/artifacts/{0}'.format(valid_ipfs_uri), chain='side'),
+    mock_client.http_mock.get(mock_client.url_with_parameters('/artifacts/{0}/'.format(valid_ipfs_uri), chain='side'),
                               body=success(valid_response))
     assert await mock_client.list_artifacts(valid_ipfs_uri) == [(x['name'], x['hash']) for x in valid_response]
 
@@ -385,15 +405,3 @@ async def test_on_initialized_channel(mock_client):
     await mock_client.home_ws_mock.send(event('initialized_channel', initialized_channel))
 
     await done.wait()
-
-
-@pytest.mark.asyncio
-async def test_bid_and_mask_to_bid():
-    # arrange
-    mask = [False] * 128 + [True] + [False] * 127
-    bid = [.5 * 10 ** 18]
-    # act
-    # assert
-    assert polyswarmclient.Client.get_artifact_bid_at_(mask, bid, 128) == .5 * 10 ** 18
-    assert polyswarmclient.Client.get_artifact_bid_at_(mask, bid, 127) == 0
-    assert polyswarmclient.Client.get_artifact_bid_at_(mask, bid, 129) == 0

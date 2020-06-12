@@ -14,7 +14,7 @@ class BalanceClient(object):
         self.__client = client
 
     @backoff.on_exception(backoff.expo, LowBalanceError, max_tries=MAX_TRIES)
-    async def raise_low_balance(self, request_nct, chain):
+    async def raise_for_low_balance(self, request_nct, chain):
         balance = await self.get_nct_balance(chain)
         # If we don't have the balance, don't submit. Wait and try a few times, then skip
         if balance < request_nct:

@@ -1,21 +1,24 @@
 import asyncio
+import json
 import logging
+import warnings
 
+import aiohttp
 from polyswarmartifact import ArtifactType
 
-from polyswarmclient import bloom
-from polyswarmclient.verifiers import NctApproveVerifier, \
+from polyswarmclient.ethereum import bloom
+from polyswarmclient.ethereum.verifiers import NctApproveVerifier, \
     PostBountyVerifier, PostAssertionVerifier, RevealAssertionVerifier, \
     PostVoteVerifier, SettleBountyVerifier
-from polyswarmclient.transaction import AbstractTransaction
+from polyswarmclient.ethereum.transaction import EthereumTransaction
 from polyswarmclient.parameters import Parameters
 from polyswarmclient.utils import bool_list_to_int, calculate_commitment
 
 logger = logging.getLogger(__name__)
 
 
-class PostBountyTransaction(AbstractTransaction):
-    def __init__(self, client, artifact_type, amount, bounty_fee, artifact_uri, num_artifacts, duration, bloom,
+class PostBountyTransaction(EthereumTransaction):
+    def __init__(self, client, artifact_type, amount, bounty_fee, artifact_uri, num_artifacts, duration, bloom_,
                  metadata):
         self.amount = amount
         self.artifact_type = artifact_type
@@ -27,7 +30,7 @@ class PostBountyTransaction(AbstractTransaction):
             self.metadata = ''
 
         approve = NctApproveVerifier(amount + bounty_fee)
-        bounty = PostBountyVerifier(artifact_type, amount, artifact_uri, num_artifacts, duration, bloom, self.metadata)
+        bounty = PostBountyVerifier(artifact_type, amount, artifact_uri, num_artifacts, duration, bloom_, self.metadata)
 
         super().__init__(client, [approve, bounty])
 
@@ -56,7 +59,7 @@ class PostBountyTransaction(AbstractTransaction):
         return False
 
 
-class PostAssertionTransaction(AbstractTransaction):
+class PostAssertionTransaction(EthereumTransaction):
     def __init__(self, client, bounty_guid, bid, assertion_fee, mask, commitment):
         self.bounty_guid = bounty_guid
         self.bid = bid
@@ -91,7 +94,7 @@ class PostAssertionTransaction(AbstractTransaction):
         return False
 
 
-class RevealAssertionTransaction(AbstractTransaction):
+class RevealAssertionTransaction(EthereumTransaction):
     def __init__(self, client, bounty_guid, index, nonce, verdicts, metadata):
         self.verdicts = verdicts
         self.metadata = metadata
@@ -122,7 +125,7 @@ class RevealAssertionTransaction(AbstractTransaction):
         return False
 
 
-class PostVoteTransaction(AbstractTransaction):
+class PostVoteTransaction(EthereumTransaction):
     def __init__(self, client, bounty_guid, votes, valid_bloom):
         self.votes = votes
         self.valid_bloom = valid_bloom
@@ -149,7 +152,7 @@ class PostVoteTransaction(AbstractTransaction):
         return False
 
 
-class SettleBountyTransaction(AbstractTransaction):
+class SettleBountyTransaction(EthereumTransaction):
     def __init__(self, client, bounty_guid):
         self.guid = bounty_guid
         settle = SettleBountyVerifier(bounty_guid)
@@ -285,7 +288,7 @@ class BountiesClient(object):
             duration (int): Number of blocks to accept new assertions
             chain (str): Which chain to operate on
             api_key (str): Override default API key
-            metadata (str): Optional IPFS hash for metadata
+            metadata (Optional[str]): Optional metadata
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
@@ -320,7 +323,7 @@ class BountiesClient(object):
 
         return result
 
-    async def get_all_assertions(self, bounty_guid, chain, api_key=None):
+    async def get_assertions(self, bounty_guid, chain, api_key=None):
         """Get an assertion from polyswarmd.
 
         Args:
@@ -338,7 +341,7 @@ class BountiesClient(object):
 
         return result
 
-    async def post_assertion(self, bounty_guid, bid, mask, verdicts, chain, api_key=None):
+    async def post_assertion(self, bounty_guid, bid, mask, verdicts, chain, api_key=None, metadata=None):
         """Post an assertion to polyswarmd.
 
         Args:
@@ -369,12 +372,17 @@ class BountiesClient(object):
             index (int): The index of the assertion to reveal
             nonce (str): Secret nonce used to reveal assertion
             verdicts (List[bool]): Verdict (malicious/benign) for each of the artifacts in the bounty
-            metadata (str): Optional metadata
+            metadata (str): Metadata about the scan
             chain (str): Which chain to operate on
             api_key (str): Override default API key
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
+        try:
+            metadata = await self.post_metadata(metadata, chain, api_key)
+        except (json.JSONDecodeError, aiohttp.client.ClientResponseError):
+            warnings.warn('Posting non-json, or non-confirming json is deprecated', DeprecationWarning)
+            pass
 
         transaction = RevealAssertionTransaction(self.__client, bounty_guid, index, nonce, verdicts, metadata)
 
@@ -388,13 +396,16 @@ class BountiesClient(object):
         """Posts metadata to IPFS
 
         Args:
-            metadata (str): metadata json that conforms to Assertion Schema in polyswarm-artifact
+            metadata (str): metadata json that conforms to Schema in polyswarm-artifact
             chain (str): Which chain to operate on
             api_key (str): Override default API key
 
         Returns: ipfs_hash or None
 
         """
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata)
+
         success, ipfs_hash = await self.__client.make_request('POST', '/bounties/metadata', chain,
                                                               json=metadata,
                                                               api_key=api_key)
@@ -418,7 +429,7 @@ class BountiesClient(object):
 
         return result
 
-    async def get_all_votes(self, bounty_guid, chain, api_key=None):
+    async def get_votes(self, bounty_guid, chain, api_key=None):
         """
         Get a vote from polyswamrd
 
@@ -474,11 +485,11 @@ class BountiesClient(object):
         if bounty.get('author', None) == account:
             return True
 
-        for assertion in await self.get_all_assertions(bounty_guid, chain, api_key):
+        for assertion in await self.get_assertions(bounty_guid, chain, api_key):
             if assertion.get('author', None) == account:
                 return True
 
-        for vote in await self.get_all_votes(bounty_guid, chain, api_key):
+        for vote in await self.get_votes(bounty_guid, chain, api_key):
             if vote.get('voter', None) == account:
                 return True
 

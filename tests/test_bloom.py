@@ -2,7 +2,7 @@
 # license) with modifications
 
 from hypothesis import strategies as st, given, settings
-from polyswarmclient.bloom import BloomFilter
+from polyswarmclient.ethereum.bloom import BloomFilter
 
 value = st.binary(max_size=32)
 values = st.lists(value, min_size=0, max_size=256)

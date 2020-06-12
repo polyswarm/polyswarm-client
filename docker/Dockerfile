@@ -1,8 +1,13 @@
-# This loads version 3.6.8
+FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction AS transaction
+
 FROM python:3.6-stretch
 LABEL maintainer="PolySwarm Developers <info@polyswarm.io>"
 
 ENV DOCKERIZE_VERSION v0.6.1
+
+COPY --from=transaction /usr/src/app /polyswarm-transaction
+RUN pip3 install --cache-dir=/tmp /polyswarm-transaction \
+    && rm -rf /polyswarm-transaction
 
 RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
     && tar -C /usr/local/bin -xzvf dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
@@ -11,9 +16,11 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 WORKDIR /usr/src/app
 
 COPY requirements.txt ./
+COPY requirements-test.txt ./
 
 RUN pip install -U pip wheel \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-test.txt
 
 COPY . .
 

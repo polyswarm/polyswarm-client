@@ -6,6 +6,8 @@ from microengine.bidstrategy.conservative import BidStrategy as ConservativeStra
 from microengine.bidstrategy.default import BidStrategy as DefaultStrategy
 from microengine.bidstrategy.aggressive import BidStrategy as AggressiveStrategy
 
+from tests.utils.fixtures import mock_client
+
 
 class Microengine(AbstractMicroengine):
     def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None, **kwargs):
