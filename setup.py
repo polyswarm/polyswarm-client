@@ -1,12 +1,25 @@
+import re
+from pathlib import Path
 from setuptools import find_packages, setup
-
 
 # The README.md will be used as the content for the PyPi package details page on the Python Package Index.
 with open("README.md", "r") as readme:
     long_description = readme.read()
 
+
+def requirements_entries(*entries) -> 'List[str]':
+    """Returns a list of requirements matching each 'entries'"""
+    reqs = [r.strip()
+            for f in (Path('requirements.txt'), Path('requirements-test.txt'))
+            for r in f.read_text().split_lines() if not r.startswith('#')]
+    return [
+        # find line starting w/ `entry` followed by any non-word char except . & -.
+        next(filter(re.compile('^' + re.escape(entry) + r'\b(?![-.])').match, reqs))
+        for entry in entries
+    ]
+
 setup(name='polyswarm-client',
-      version='2.7.5',
+      version='2.8.0',
       description='Client library to simplify interacting with a polyswarmd instance',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -15,44 +28,43 @@ setup(name='polyswarm-client',
       url='https://github.com/polyswarm/polyswarm-client',
       license='MIT',
       include_package_data=True,
-      install_requires=[
-          'aiodns==2.0.0',
-          'aiohttp==3.6.2',
-          'aioredis==1.3.1',
-          'aioresponses==0.6.3',
-          'aiorwlock==0.6.0',
-          'backoff==1.10.0',
-          'base58==2.0.0',
-          'cachetools==4.1.0',
-          'click>=6.7',
-          "dataclasses==0.7; python_version == '3.6'",
-          'hexbytes==0.2.0',
-          'jsonschema==3.0.2',
-          'polyswarm-artifact>=1.3.3',
-          'pycryptodome>=3.9.7',
-          'python-json-logger==0.1.11',
-          'python-magic-bin==0.4.14;platform_system=="Windows"',
-          'python-magic==0.4.15;platform_system=="Linux"',
-          'web3==5.6.0',
-          'websockets==8.1',
-          'yara-python==3.11.0',
-      ],
+      install_requires=requirements_entries(
+          'aiohttp',
+          'aiodns',
+          'aioredis',
+          'aioresponses',
+          'aiorwlock',
+          'cachetools',
+          'asynctest',
+          'backoff',
+          'base58',
+          'click',
+          'hexbytes',
+          'polyswarm-artifact',
+          'pycryptodome',
+          'python-json-logger',
+          'python-magic-bin',
+          'python-magic',
+          'web3',
+          'websockets',
+          'yara-python',
+      ),
       package_dir={'': 'src'},
       packages=find_packages('src'),
       python_requires='>=3.6.5,<4',
       test_suite='tests',
-      tests_require=[
-          'asynctest==0.13.0',
-          'coverage==5.0.3',
-          'deepdiff==4.0.7',
-          'hypothesis==5.5.4',
-          'pytest==5.4.2',
-          'pytest-asyncio==0.12.0',
-          'pytest-cov==2.8.1',
-          'pytest-timeout==1.3.4',
-          'pytest-mock==3.0.',
-          'tox==3.4.0',
-      ],
+      tests_require=requirements_entries(
+          'asynctest',
+          'coverage',
+          'deepdiff',
+          'hypothesis',
+          'pytest',
+          'pytest-asyncio',
+          'pytest-cov',
+          'pytest-timeout',
+          'pytest-mock',
+          'tox',
+      ),
       entry_points={
           'console_scripts': [
               'ambassador=ambassador.__main__:main',
