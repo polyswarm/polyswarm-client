@@ -222,10 +222,12 @@ release-latest-windows:
 
 kick-polyswarm-client-internal:
   stage: postbuild
-  needs: ["build-linux", "build-windows"]
+  needs:
+    - build-linux
+    - build-windows
   trigger:
-    - project: externalci/polyswarm-client-internal
-    - strategy: depend
+    project: externalci/polyswarm-client-internal
+    strategy: depend
 
 kick-after-complete13:
   stage: deployment
