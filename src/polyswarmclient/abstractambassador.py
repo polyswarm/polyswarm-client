@@ -301,7 +301,7 @@ class AbstractAmbassador(ABC):
         asyncio.get_event_loop().create_task(self.run_task(chain))
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
-        await self.client.bounties.settle_all_bounties(chain)
+        asyncio.get_event_loop().create_task(self.client.bounties.settle_all_bounties(chain))
         return []
 
     async def __handle_new_block(self, number, chain):

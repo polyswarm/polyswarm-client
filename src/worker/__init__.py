@@ -169,6 +169,7 @@ class Worker:
     async def process_job(self, job: JobRequest, session: ClientSession):
         # Setup default response as ScanResult, in case we exceeded uses
         remaining_time = 0
+        loop = asyncio.get_event_loop()
         try:
             async with self.liveness_recorder.waiting_task(job.key, round(time.time())):
                 remaining_time = self.get_remaining_time(job)
@@ -178,7 +179,7 @@ class Worker:
 
             response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                    scan_result.metadata)
-            await self.respond(job, response)
+            loop.create_task(self.respond(job, response))
             self.tries = 0
         except OSError:
             logger.exception('Redis connection down')

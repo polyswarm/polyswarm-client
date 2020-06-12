@@ -269,6 +269,7 @@ class EthereumTransaction(metaclass=ABCMeta):
         Returns:
             Response JSON parsed from polyswarmd containing transaction status
         """
+        loop = asyncio.get_event_loop()
         nonce_manager = self.client.nonce_managers[chain]
         errors = []
 
@@ -291,7 +292,7 @@ class EthereumTransaction(metaclass=ABCMeta):
             if not success:
                 # Known transaction errors seem to be a geth issue, don't spam log about it
                 if any(['invalid transaction error' in e.lower() for e in errors]):
-                    await nonce_manager.mark_update_nonce()
+                    loop.create_task(nonce_manager.mark_update_nonce())
                     raise NonceDesyncError
 
                 all_known_tx_errors = results is not None and \
@@ -367,6 +368,7 @@ class EthereumTransaction(metaclass=ABCMeta):
             (bool, dict, List[str]): Success, Resync nonce, Response JSON parsed from polyswarmd containing
                 emitted events, errors
         """
+        loop = asyncio.get_event_loop()
         nonce_manager = self.client.nonce_managers[chain]
         success, results = await self.client.make_request('GET', '/transactions', chain,
                                                           json={'transactions': txhashes}, api_key=api_key)
@@ -385,7 +387,7 @@ class EthereumTransaction(metaclass=ABCMeta):
         # First, tries to sleep and see if the transaction did succeed (settles can timeout)
         if not success and any([e for e in errors if 'timeout during wait for receipt' in e.lower()]):
             logger.error('Nonce desync detected during get, resyncing and trying again')
-            await nonce_manager.mark_overset_nonce(nonces)
+            loop.create_task(nonce_manager.mark_overset_nonce(nonces))
             await asyncio.sleep(1)
             raise NonceDesyncError
 

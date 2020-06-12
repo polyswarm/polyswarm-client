@@ -104,12 +104,18 @@ class LivenessRecorder(ABC):
             key: task key
             start_time: start time, in any units (either block number or time)
         """
+        asyncio.get_event_loop().create_task(self._add_waiting_task(key, start_time))
+
+    async def _add_waiting_task(self, key, start_time):
         async with self.waiting_lock:
             if key not in self.waiting:
                 self.waiting[key] = start_time
 
     async def remove_waiting_task(self, key):
         """Mark a task as done processing"""
+        asyncio.get_event_loop().create_task(self._remove_waiting_task(key))
+
+    async def _remove_waiting_task(self, key):
         async with self.waiting_lock:
             if key in self.waiting:
                 del self.waiting[key]

@@ -282,7 +282,7 @@ class Client(object):
         except RateLimitedError:
             # Handle "Too many requests" rate limit by not hammering server, and pausing all requests for a bit
             logger.warning('Hit polyswarmd rate limits, stopping all requests for a moment')
-            await self.rate_limit.trigger()
+            asyncio.get_event_loop().create_task(self.rate_limit.trigger())
             raise
 
     async def list_artifacts(self, ipfs_uri, api_key=None):
@@ -368,7 +368,7 @@ class Client(object):
         except RateLimitedError:
             # Handle "Too many requests" rate limit by not hammering server, and pausing all requests for a bit
             logger.warning('Hit polyswarmd rate limits, stopping all requests for a moment')
-            await self.rate_limit.trigger()
+            asyncio.get_event_loop().create_task(self.rate_limit.trigger())
             raise
 
     @staticmethod
@@ -450,7 +450,7 @@ class Client(object):
             except RateLimitedError:
                 # Handle "Too many requests" rate limit by not hammering server, and pausing all requests for a bit
                 logger.warning('Hit polyswarmd rate limits, stopping all requests for a moment')
-                await self.rate_limit.trigger()
+                asyncio.get_event_loop().create_task(self.rate_limit.trigger())
                 raise
             finally:
                 for f in to_close:

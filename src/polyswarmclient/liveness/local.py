@@ -81,7 +81,7 @@ class LocalLivenessRecorder(LivenessRecorder):
         super().__init__()
 
     async def record(self):
-        await self.write_async()
+        asyncio.get_event_loop().create_task(self.write_async())
 
     async def write_async(self):
         """Get the json format of Liveliness, and write to the file"""

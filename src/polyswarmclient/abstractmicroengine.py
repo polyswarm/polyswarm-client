@@ -185,7 +185,7 @@ class AbstractMicroengine(object):
             raise FatalError('Scanner setup failed', 1)
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
-        await self.client.bounties.settle_all_bounties(chain)
+        asyncio.get_event_loop().create_task(self.client.bounties.settle_all_bounties(chain))
         return []
 
     async def __handle_new_bounty(self, guid, artifact_type, author, amount, uri, expiration, metadata, block_number, txhash, chain):
