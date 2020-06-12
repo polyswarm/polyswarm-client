@@ -6,7 +6,8 @@ import operator
 from web3 import Web3
 
 FILTER_BITS = 8 * 256
-assert FILTER_BITS <= (1 << 16)  # Has to be a short, basically
+if FILTER_BITS > (1 << 16):
+    raise ValueError('Filter bits must be less than 65536')
 
 HASH_FUNCS = 8
 

@@ -255,8 +255,7 @@ class Client(object):
             await self.rate_limit.check()
             async with aiohttp.ClientSession() as session:
                 async with session.request(method, uri, params=params, headers=headers, json=json) as raw:
-                    if raw.status == 429:
-                        raise RateLimitedError
+                    self._check_status_for_rate_limit(raw.status)
 
                     try:
                         response = await raw.json()
@@ -356,8 +355,7 @@ class Client(object):
             async with aiohttp.ClientSession() as session:
                 async with session.get(uri, params=params, headers=headers) as raw_response:
                     # Handle "Too many requests" rate limit by not hammering server, and instead sleeping a bit
-                    if raw_response.status == 429:
-                        raise RateLimitedError
+                    self._check_status_for_rate_limit(raw_response.status)
 
                     if raw_response.status / 100 == 2:
                         return await raw_response.read()
@@ -434,9 +432,8 @@ class Client(object):
                     async with aiohttp.ClientSession() as session:
                         async with session.post(uri, params=params, headers=headers,
                                                 data=mpwriter) as raw_response:
-                            if raw_response.status == 429:
-                                raise RateLimitedError
 
+                            self._check_status_for_rate_limit(raw_response.status)
                             try:
                                 response = await raw_response.json()
                             except (ValueError, aiohttp.ContentTypeError):
@@ -465,6 +462,11 @@ class Client(object):
                 return None
 
             return response.get('result')
+
+    @staticmethod
+    def _check_status_for_rate_limit(status):
+        if status == 429:
+            raise RateLimitedError
 
     def schedule(self, expiration, event, chain):
         """Schedule an event to execute on a particular block
