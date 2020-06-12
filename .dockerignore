@@ -11,3 +11,4 @@ venv/
 .coverage
 *.swp
 *.pyc
+docker/Dockerfile
