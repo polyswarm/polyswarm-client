@@ -66,6 +66,8 @@ test-linux:
   stage: test
   tags:
     - kube
+  needs:
+    - build-linux
   script:
     - docker pull $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
     - docker run $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA pytest -s --cov=polyswarmclient
@@ -87,6 +89,8 @@ test-windows:
   stage: test
   tags:
     - win-participants
+  needs:
+    - build-windows
   before_script:
     - echo "Skip e2e install in before_script for windows participants"
   script:
@@ -101,6 +105,8 @@ test-windows:
 
 e2e:
   stage: e2e
+  needs:
+    - test-linux
   tags:
     - kube
   script:
@@ -223,8 +229,8 @@ release-latest-windows:
 kick-polyswarm-client-internal:
   stage: postbuild
   needs:
-    - build-linux
-    - build-windows
+    - test-linux
+    - test-windows
   trigger:
     project: externalci/polyswarm-client-internal
     strategy: depend
