@@ -8,12 +8,10 @@ RUN printf 'path-exclude /usr/share/%s/*\n' doc man groff info lintian linda > /
 
 ARG DOCKERIZE_VERSION=v0.6.1
 RUN apt-get update -y \
+    && apt-get install -qy --no-install-recommends apt-utils \
     && apt-get install -y --no-install-recommends \
-        apt-utils \
+        ca-certificates
         gnupg2 \
-        ca-certificates \
-        apt-transport-https \
-    && apt-get install -y --no-install-recommends \
         coreutils netbase \
         procps \
         tar bzip2 xz-utils ncompress \
