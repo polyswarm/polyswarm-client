@@ -2,6 +2,10 @@ FROM python:3.7-slim-buster
 FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction AS transaction
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Exclude documentation packages from being installed
+RUN printf 'path-exclude /usr/share/%s/*\n' doc man groff info lintian linda > /etc/dpkg/dpkg.cfg.d/01_nodoc
+
 ARG DOCKERIZE_VERSION=v0.6.1
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
@@ -16,7 +20,7 @@ RUN apt-get update -y \
         gcc libc-dev pkg-config make file \
         git-core \
         wget \
-    && wget -qO - "http://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz" \
+    && wget -qO - "https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz"
         | tar -xz -C /usr/local/bin
 
 WORKDIR /usr/src/app
@@ -25,15 +29,14 @@ ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1
 
 COPY --from=transaction /usr/src/app /tmp/polyswarm-transaction
 COPY . .
-RUN pip install --no-cache-dir -U pip wheel \
-    && pip install --no-cache-dir -r \
+RUN pip3 install --no-cache-dir \
+      cytools[cython] \
       /tmp/polyswarm-transaction \
-      requirements.txt \
-      requirements-test.txt \
-      Cython .\
+      -r requirements.txt \
+      -r requirements-test.txt \
+      . \
     # Build truth db for arbiter verbatim
-    && cd docker \
-    && verbatimdbgen \
+    && cd docker && verbatimdbgen \
     && apt-get -qy autoremove \
     && apt-get -q clean \
     && rm -r /var/lib/apt/lists/* \

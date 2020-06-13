@@ -9,14 +9,16 @@ with open("README.md", "r") as readme:
 
 def requirements_entries(*entries) -> 'List[str]':
     """Returns a list of requirements matching each 'entries'"""
-    reqs = [r.strip()
-            for f in (Path('requirements.txt'), Path('requirements-test.txt'))
-            for r in f.read_text().splitlines() if not r.startswith('#')]
+    reqs = [
+        r.strip() for f in ('requirements.txt', 'requirements-test.txt')
+        for r in Path(f).read_text().splitlines() if not r.startswith('#')
+    ]
     return [
         # find line starting w/ `entry` followed by any non-word char except . & -.
         next(filter(re.compile('^' + re.escape(entry) + r'\b(?![-.])').match, reqs))
         for entry in entries
     ]
+
 
 setup(name='polyswarm-client',
       version='2.8.0',
