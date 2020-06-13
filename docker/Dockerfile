@@ -20,7 +20,7 @@ RUN apt-get update -y \
         gcc libc-dev pkg-config make file \
         git-core \
         wget \
-    && wget -qO - "https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz"
+    && wget -qO - "https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz" \
         | tar -xz -C /usr/local/bin
 
 WORKDIR /usr/src/app
