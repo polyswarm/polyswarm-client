@@ -1,4 +1,5 @@
 FROM python:3.7-slim-buster
+FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction AS transaction
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -24,10 +25,13 @@ WORKDIR /usr/src/app
 
 ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1"
 
+COPY --from=transaction /usr/src/app /tmp/polyswarm-transaction
 COPY . .
+
 RUN pip3 install --no-cache-dir -U wheel setuptools \
     && pip3 install --no-cache-dir \
       cytoolz[cython] \
+      /tmp/polyswarm-transaction \
       -r requirements.txt \
       -r requirements-test.txt \
       . \
