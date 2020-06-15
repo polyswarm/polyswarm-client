@@ -47,11 +47,11 @@ build-windows:
   script:
     - $env:DOCKER_HOST = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
-    - cp .\docker\Dockerfile .\docker\Dockerfile.ci
-    - (Get-Content .\docker\Dockerfile.ci) -replace [regex]::escape("polyswarm/polyswarm-transaction"), "005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction" | Set-Content .\docker\Dockerfile.ci
+    - cp .\docker\windows\Dockerfile .\docker\windows\Dockerfile.ci
+    - (Get-Content .\docker\windows\Dockerfile.ci) -replace [regex]::escape("polyswarm/polyswarm-transaction"), "005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction" | Set-Content .\docker\windows\Dockerfile.ci
     - docker pull $REPO_URL/$BASE_IMAGE_NAME-windows:latest
     - docker build
-      -f docker/windows/Dockerfile
+      -f docker/windows/Dockerfile.ci
       -t $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA
       -t $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_REF_SLUG
       --cache-from=$REPO_URL/$BASE_IMAGE_NAME-windows:latest
