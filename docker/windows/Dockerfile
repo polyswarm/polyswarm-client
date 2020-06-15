@@ -17,13 +17,13 @@ RUN Invoke-WebRequest 'https://github.com/polyswarm/polyswarm-transaction/archiv
 ## -- Install polyswarm-client -----------
 WORKDIR C:\polyswarm\polyswarm-client
 COPY . .
-RUN pip install --no-cache-dir -U wheel setuptools;                              `
-    pip install --no-cache-dir                                                   `
-                  cytoolz[cython]                                                `
-                  ${Env:TEMP}\polyswarm-transaction\polyswarm-transaction-master `
-                  -r C:\polyswarm\polyswarm-client\requirements.txt              `
-                  -r C:\polyswarm\polyswarm-client\requirements-test.txt         `
-                  C:\polyswarm\polyswarm-client;                                 `
+RUN pip3 install --no-cache-dir -U wheel setuptools;                              `
+    pip3 install --no-cache-dir                                                   `
+                  cytoolz[cython]                                                 `
+                  ${Env:TEMP}\polyswarm-transaction\polyswarm-transaction-master\ `
+                  -r C:\polyswarm\polyswarm-client\requirements.txt               `
+                  -r C:\polyswarm\polyswarm-client\requirements-test.txt          `
+                  C:\polyswarm\polyswarm-client\;                                 `
 ## -- Cleanup ----------------------------
-  choco optimize;                                                                `
+  choco optimize;                                                                 `
   Remove-Item -Force -Recurse -Path ${Env:TEMP}\*
