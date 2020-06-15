@@ -1,5 +1,5 @@
 FROM python:3.7-slim-buster
-FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction AS transaction
+FROM polyswarm/polyswarm-transaction AS transaction
 
 ENV DEBIAN_FRONTEND=noninteractive
 

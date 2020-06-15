@@ -28,8 +28,9 @@ build-linux:
     - kube
   script:
     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
+    - sed "s#FROM polyswarm/polyswarm-transaction#FROM $REPO_URL/polyswarm-transaction#" docker/Dockerfile > docker/Dockerfile.ci
     - docker build
-      -f docker/Dockerfile
+      -f docker/Dockerfile.ci
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_REF_SLUG
       --cache-from=$REPO_URL/$BASE_IMAGE_NAME:latest
@@ -46,6 +47,9 @@ build-windows:
   script:
     - $env:DOCKER_HOST = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
+    - cp .\docker\Dockerfile .\docker\Dockerfile.ci
+    - (Get-Content .\docker\Dockerfile.ci) -replace [regex]::escape("polyswarm/python37-windowsservercore-1809"), "005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm/python37-windowsservercore-1809" | Set-Content .\docker\Dockerfile.ci
+    - (Get-Content .\docker\Dockerfile.ci) -replace [regex]::escape("polyswarm/polyswarm-transaction"), "005789955001.dkr.ecr.us-east-1.amazonaws.com/polyswarm-transaction" | Set-Content .\docker\Dockerfile.ci
     - docker pull $REPO_URL/$BASE_IMAGE_NAME-windows:latest
     - docker build
       -f docker/windows/Dockerfile

@@ -1,6 +1,6 @@
-# escape=`
+ # escape=`
 FROM python:3.7-windowsservercore-1809
-FROM polyswarm/polyswarm-transaction AS transaction
+FROM polyswarm/polyswarm-transaction as transaction
 LABEL maintainer="PolySwarm Developers <info@polyswarm.io>"
 SHELL ["powershell", "-ExecutionPolicy bypass", "-NoLogo", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 ENV DOTNET_RUNNING_IN_CONTAINER=true                        `
@@ -14,7 +14,6 @@ RUN iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.or
 
 ## -- Install polyswarm-client -----------
 WORKDIR C:\polyswarm\polyswarm-client
-COPY --from=transaction /usr/src/app ${env:TEMP}\polyswarm-transaction
 COPY . .
 
 RUN pip3 install --no-cache-dir -U wheel setuptools; `
