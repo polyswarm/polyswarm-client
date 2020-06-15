@@ -15,11 +15,15 @@ async def test_rate_limit_trigger_debounce(event_loop):
 
     # Really sync the trigger moment
     event = asyncio.Event()
+
     async def sync_trigger():
         await event.wait()
         await rate_limit.trigger()
 
-    task = event_loop.create_task(asyncio.gather(*[sync_trigger(), sync_trigger()]))
+    async def gather_trigger():
+        await asyncio.gather(*[sync_trigger(), sync_trigger()])
+
+    task = event_loop.create_task(gather_trigger())
     event.set()
     task.add_done_callback(lambda: rate_limit.rate_limit_event.set.assert_called_once())
 
