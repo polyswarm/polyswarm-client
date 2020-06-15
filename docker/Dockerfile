@@ -28,7 +28,7 @@ ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1
 COPY --from=transaction /usr/src/app /tmp/polyswarm-transaction
 COPY . .
 RUN pip3 install --no-cache-dir \
-      cytools[cython] \
+      cytoolz[cython] \
       /tmp/polyswarm-transaction \
       -r requirements.txt \
       -r requirements-test.txt \

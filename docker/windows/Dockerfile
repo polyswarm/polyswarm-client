@@ -7,7 +7,7 @@ WORKDIR C:\polyswarm\polyswarm-client
 COPY --from=transaction /usr/src/app ${env:TEMP}\polyswarm-transaction
 COPY . .
 RUN pip3 install --no-cache-dir     `
-  cytools[cython]                   `
+  cytoolz[cython]                   `
   ${env:TEMP}\polyswarm-transaction `
   -r requirements.txt               `
   -r requirements-test.txt          `
