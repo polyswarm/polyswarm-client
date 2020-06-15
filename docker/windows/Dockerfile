@@ -15,14 +15,12 @@ RUN iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.or
 WORKDIR C:\polyswarm\polyswarm-client
 COPY . .
 
-RUN pip3 install --no-cache-dir -U wheel setuptools; `
-    pip3 install --no-cache-dir                      `
-                  cytoolz[cython]                    `
-                  -r requirements.txt                `
-                  -r requirements-test.txt           `
-                  . ;
+RUN pip3 install --no-cache-dir -U wheel setuptools;                     `
+    pip3 install --no-cache-dir                                          `
+                  cytoolz[cython]                                        `
+                  -r C:\polyswarm\polyswarm-client\requirements.txt      `
+                  -r C:\polyswarm\polyswarm-client\requirements-test.txt `
+                  C:\polyswarm\polyswarm-client\
 
 ## -- Cleanup ----------------------------
-RUN choco optimize;                          `
-  Remove-Item -Force -Recurse ${Env:TEMP}\*; `
-  Remove-Item -Force -Recurse "${Env:ProgramData}\Package Cache\";
+RUN choco optimize; Remove-Item -Force -Recurse -Path ${Env:TEMP}\*
