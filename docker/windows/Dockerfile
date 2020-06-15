@@ -26,4 +26,4 @@ RUN pip install --no-cache-dir -U wheel setuptools;                      `
                   C:\polyswarm\polyswarm-client;                         `
 ## -- Cleanup ----------------------------
   choco optimize;                                                        `
-  Remove-Item -Force -Recurse -Path ${Env:TEMP}\*, "${Env:ProgramData}\Package Cache"
+  Remove-Item -Force -Recurse -Path ${Env:TEMP}\*
