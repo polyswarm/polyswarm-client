@@ -8,17 +8,18 @@ ENV DOTNET_RUNNING_IN_CONTAINER=true                        `
 
 ## -- Download polyswarm-transaction ------
 RUN Invoke-WebRequest 'https://github.com/polyswarm/polyswarm-transaction/archive/master.zip' -Outfile ${Env:TEMP}\pstr.zip; `
-    Expand-Archive -Path ${Env:TEMP}\pstr.zip -DestinationPath ${Env:TEMP}\polyswarm-transaction; `
+    Expand-Archive -Path ${Env:TEMP}\pstr.zip -DestinationPath ${Env:TEMP}\polyswarm-transaction;                            `
 ## -- Install Choco -----------------------
-    iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')); `
-    choco install git -y --params "/NoGitLFS /SChannel /NoShellIntegration";                      `
-    choco install vcbuildtools -y --version 2015.4
+    iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'));                            `
+    choco install git --no-progress -r -y --params "/NoGitLFS /SChannel /NoShellIntegration";                                `
+    choco install vcbuildtools --no-progress -r -y --version 2015.4
 
 ## -- Install polyswarm-client -----------
 WORKDIR C:\polyswarm\polyswarm-client
 COPY . .
-RUN pip3 install --no-cache-dir -U wheel setuptools;                              `
-    pip3 install --no-cache-dir                                                   `
+RUN pip install --no-cache-dir -U pip;                                            `
+    pip install --no-cache-dir -U wheel setuptools;                               `
+    pip install --no-cache-dir                                                    `
                   cytoolz[cython]                                                 `
                   ${Env:TEMP}\polyswarm-transaction\polyswarm-transaction-master\ `
                   -r C:\polyswarm\polyswarm-client\requirements.txt               `
@@ -27,3 +28,4 @@ RUN pip3 install --no-cache-dir -U wheel setuptools;                            
 ## -- Cleanup ----------------------------
   choco optimize;                                                                 `
   Remove-Item -Force -Recurse -Path ${Env:TEMP}\*
+
