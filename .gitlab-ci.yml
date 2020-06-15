@@ -4,7 +4,6 @@ services:
   - docker:dind
 
 stages:
-  - prebuild
   - build
   - test
   - e2e
@@ -56,19 +55,6 @@ build-windows:
       .
     - docker push $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA
     - docker push $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_REF_SLUG
-
-build-base-windows:
-  stage: prebuild
-  tags:
-    - win-participants
-  script:
-    - $env:DOCKER_HOST = ''
-    - aws ecr get-login --no-include-email --region us-east-1 | Powershell
-    - docker build -f docker/windows/base/Dockerfile -t $REPO_URL/python37-windowsservercore-1809:latest .
-    - docker push $REPO_URL/python37-windowsservercore-1809:latest
-  only:
-    changes:
-      - docker/windows/base/Dockerfile
 
 ###############################################################
 # Test Stage

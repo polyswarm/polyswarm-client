@@ -1,11 +1,28 @@
 # escape=`
-FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/python37-windowsservercore-1809
+FROM python:3.7-windowsservercore-1809
+LABEL maintainer="PolySwarm Developers <info@polyswarm.io>"
+SHELL ["powershell", "-ExecutionPolicy bypass", "-NoLogo", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+ENV DOTNET_RUNNING_IN_CONTAINER=true                        `
+    CL="/O1 /Os /favor:INTEL64" CFLAGS="$CL" CXXFLAGS="$CL" `
+    chocolateyUseWindowsCompression=true
+
+## -- Install Choco -----------------------
+RUN iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')); `
+    choco install git -y --params "/NoGitLFS /SChannel /NoShellIntegration";                      `
+    choco install vcbuildtools -y --version 2015.4
 
 ## -- Install polyswarm-client -----------
 WORKDIR C:\polyswarm\polyswarm-client
 COPY . .
-RUN pip3 install --no-cache-dir     `
-  cytoolz[cython]                   `
-  -r requirements.txt               `
-  -r requirements-test.txt          `
-  . ;                               `
+
+RUN pip3 install --no-cache-dir -U wheel setuptools; `
+    pip3 install --no-cache-dir                      `
+                  cytoolz[cython]                    `
+                  -r requirements.txt                `
+                  -r requirements-test.txt           `
+                  . ;
+
+## -- Cleanup ----------------------------
+RUN choco optimize;                          `
+  Remove-Item -Force -Recurse ${Env:TEMP}\*; `
+  Remove-Item -Force -Recurse "${Env:ProgramData}\Package Cache\";

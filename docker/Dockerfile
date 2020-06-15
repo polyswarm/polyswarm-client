@@ -25,7 +25,8 @@ WORKDIR /usr/src/app
 ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1"
 
 COPY . .
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir -U wheel setuptools \
+    && pip3 install --no-cache-dir \
       cytoolz[cython] \
       -r requirements.txt \
       -r requirements-test.txt \
