@@ -11,14 +11,14 @@ from polyswarmclient.exceptions import FatalError, NonceDesyncError, Transaction
 
 logger = logging.getLogger(__name__)
 
-LOG_MSG_ENGINE_TOO_SLOW = ('PLEASE REVIEW YOUR SCANNING LOGIC. '
-                           'Bounty inactive errors indicate that the microengine received the bounty, '
-                           'but was unable to respond to the bounty within the time window. '
-                           'Such errors are considered fatal during testing so you can easily identify them. '
-                           'If your engine is unable to respond within the time window on the live PolySwarm '
-                           'network, you risk losing the bid amount of the bounty at hand. We strongly '
-                           'encourage you to review your artifact scan process to identify areas where engine '
-                           'speed can be improved.')
+LOG_MSG_ENGINE_TOO_SLOW = """
+    PLEASE REVIEW YOUR SCANNING LOGIC.
+     
+    Bounty inactive errors indicate that the microengine received the bounty, but was unable to respond to the bounty within the time window.
+    Such errors are considered fatal during testing so you can easily identify them.
+    If your engine is unable to respond within the time window on the live PolySwarm network, you risk losing the bid amount of the bounty at hand.
+    We strongly encourage you to review your artifact scan process to identify areas where engine speed can be improved.
+    """
 
 
 class EthereumTransaction(metaclass=ABCMeta):
