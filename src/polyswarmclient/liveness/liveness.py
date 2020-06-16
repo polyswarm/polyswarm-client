@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import time
 
 from abc import ABC, abstractmethod
@@ -32,10 +33,23 @@ class LivenessCheck(ABC):
         except LivenessReadError:
             return False
 
-        time_since_last_loop = int(time.time()) - liveness.last_iteration
+        time_since_last_loop = int(math.floor(time.time())) - liveness.last_iteration
         print('Last loop was {0} seconds ago, with an average wait of {1}'.format(time_since_last_loop, liveness.average_wait))
         return time_since_last_loop < self.loop_iteration_threshold and \
             liveness.average_wait < self.average_wait_threshold
+
+
+class Task:
+    def __init__(self, recorder, key, start_time):
+        self.recorder = recorder
+        self.key = key
+        self.start_time = start_time
+
+    async def __aenter__(self):
+        await self.recorder.add_waiting_task(self.key, self.start_time)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.recorder.remove_waiting_task(self.key)
 
 
 class LivenessRecorder(ABC):
@@ -52,9 +66,15 @@ class LivenessRecorder(ABC):
         loop.create_task(self.run_liveness_loop())
 
     async def run_liveness_loop(self):
-        while True:
-            await self.advance_loop()
-            await asyncio.sleep(1)
+        try:
+            while True:
+                await self.advance_loop()
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            # Clear all waiting tasks because we got cancelled
+            async with self.waiting_lock:
+                self.waiting = {}
+            raise
 
     async def setup(self):
         self.waiting_lock = asyncio.Lock()
@@ -63,8 +83,19 @@ class LivenessRecorder(ABC):
     async def advance_loop(self):
         """The loop is turning, and record the time of the latest iteration"""
         async with self.record_lock:
-            self.liveness.last_iteration = round(time.time())
+            self.liveness.last_iteration = int(math.floor(time.time()))
             await self.record()
+
+    def waiting_task(self, key, start_time):
+        """Add waiting task, but remove when done
+
+        Use: async with liveness.waiting_task(key, start_time):
+
+        Args:
+            key: task key
+            start_time: start time, in any units (either block number or time)
+        """
+        return Task(self, key, start_time)
 
     async def add_waiting_task(self, key, start_time):
         """Add some bounty as waiting to be processed.
@@ -73,12 +104,18 @@ class LivenessRecorder(ABC):
             key: task key
             start_time: start time, in any units (either block number or time)
         """
+        asyncio.get_event_loop().create_task(self._add_waiting_task(key, start_time))
+
+    async def _add_waiting_task(self, key, start_time):
         async with self.waiting_lock:
             if key not in self.waiting:
                 self.waiting[key] = start_time
 
     async def remove_waiting_task(self, key):
         """Mark a task as done processing"""
+        asyncio.get_event_loop().create_task(self._remove_waiting_task(key))
+
+    async def _remove_waiting_task(self, key):
         async with self.waiting_lock:
             if key in self.waiting:
                 del self.waiting[key]

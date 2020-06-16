@@ -1,11 +1,11 @@
 import click
 import logging
-import sys
 import functools
 
 from balancemanager import Deposit, Withdraw, Maintainer, DepositStake, WithdrawStake, ViewBalance, ViewStake
 from polyswarmclient.config import init_logging, validate_apikey
 from polyswarmclient import Client
+from polyswarmclient.exceptions import FatalError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def cli(log, client_log, log_format):
     clientlevel = getattr(logging, client_log.upper(), None)
     if not isinstance(loglevel, int) or not isinstance(clientlevel, int):
         logging.error('invalid log level')
-        sys.exit(-1)
+        raise FatalError('Invalid log level', 1)
 
     init_logging(['balancemanager'], log_format, loglevel)
     init_logging(['polyswarmclient'], log_format, clientlevel)
@@ -81,7 +81,8 @@ def deposit(polyswarmd_addr, keyfile, password, api_key, testing, insecure_trans
     client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
     d = Deposit(client, denomination, all, amount, testing=testing)
     d.run_oneshot()
-    sys.exit(d.exit_code)
+    if d.exit_code:
+        raise FatalError('Error depositing NCT', d.exit_code)
 
 
 @cli.command()
@@ -98,7 +99,8 @@ def withdraw(polyswarmd_addr, keyfile, password, api_key, testing, insecure_tran
     client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
     w = Withdraw(client, denomination, all, amount, testing=testing)
     w.run_oneshot()
-    sys.exit(w.exit_code)
+    if w.exit_code:
+        raise FatalError('Error withdrawing NCT', w.exit_code)
 
 
 @cli.command('deposit-stake')
@@ -116,7 +118,8 @@ def deposit_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure
     client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
     d = DepositStake(client, denomination, all, amount, testing=testing, chain=chain)
     d.run_oneshot()
-    sys.exit(d.exit_code)
+    if d.exit_code:
+        raise FatalError('Error depositing stake', d.exit_code)
 
 
 @cli.command('withdraw-stake')
@@ -134,7 +137,8 @@ def withdraw_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecur
     client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
     w = WithdrawStake(client, denomination, all, amount, testing=testing, chain=chain)
     w.run_oneshot()
-    sys.exit(w.exit_code)
+    if w.exit_code:
+        raise FatalError('Error withdrawing stake', w.exit_code)
 
 
 @cli.command()
@@ -189,7 +193,8 @@ def view_balance(polyswarmd_addr, keyfile, password, api_key, testing, insecure_
     client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
     balance = ViewBalance(client, denomination, chain)
     balance.run_oneshot()
-    sys.exit(balance.exit_code)
+    if balance.exit_code:
+        raise FatalError('Error viewing balance', balance.exit_code)
 
 
 @cli.command('view-stake')
@@ -200,7 +205,8 @@ def view_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_tr
     client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
     balance = ViewStake(client, denomination, chain)
     balance.run_oneshot()
-    sys.exit(balance.exit_code)
+    if balance.exit_code:
+        raise FatalError('Error viewing stake', balance.exit_code)
 
 
 if __name__ == '__main__':

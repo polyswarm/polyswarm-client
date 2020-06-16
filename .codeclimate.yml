@@ -6,6 +6,10 @@ checks:
     enabled: false
   similar-code:
     enabled: false
+  identical-code:
+    enabled: false
+  file-lines:
+    enabled: false
 engines:
   pep8:
     enabled: true
@@ -24,6 +28,11 @@ engines:
         enabled: false
   bandit:  # security issues
     enabled: true
+    checks:
+      B101: # Warns that assert will be removed when run in production
+        enabled: false
+      B324: # Warns about usage of insecure hash functions
+        enabled: false
   sonar-python:  # security issues
     enabled: true
     checks:

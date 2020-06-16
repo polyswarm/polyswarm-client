@@ -6,8 +6,6 @@ import logging
 import platform
 import tempfile
 
-from concurrent.futures.thread import ThreadPoolExecutor
-
 
 from polyswarmclient.liveness.exceptions import LivenessReadError
 from polyswarmclient.liveness.liveness import LivenessCheck, Liveness, LivenessRecorder
@@ -80,16 +78,15 @@ class LocalLivenessRecorder(LivenessRecorder):
     """Record liveness data in a tempfile"""
     def __init__(self):
         self.path = os.path.join(tempfile.gettempdir(), 'liveness')
-        self.thread_pool_executor = ThreadPoolExecutor()
         super().__init__()
 
     async def record(self):
-        await self.write_async()
+        asyncio.get_event_loop().create_task(self.write_async())
 
     async def write_async(self):
         """Get the json format of Liveliness, and write to the file"""
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(self.thread_pool_executor,
+        await loop.run_in_executor(None,
                                    self.write_sync,
                                    json.dumps(dataclasses.asdict(self.liveness)))
 
@@ -97,7 +94,6 @@ class LocalLivenessRecorder(LivenessRecorder):
         """ Write the given content to the file at the given path.
 
         Args:
-            path: file path to write to
             content: content to write into the file
         """
         with open(self.path, 'w') as f:

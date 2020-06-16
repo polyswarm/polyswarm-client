@@ -22,15 +22,15 @@ default:
 ###############################################################
 # Build Stage (jobs inside a stage run in parallel)
 ###############################################################
-
 build-linux:
   stage: build
   tags:
     - kube
   script:
     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
+    - sed "s#FROM polyswarm/polyswarm-transaction#FROM $REPO_URL/polyswarm-transaction#" docker/Dockerfile > docker/Dockerfile.ci
     - docker build
-      -f docker/Dockerfile
+      -f docker/Dockerfile.ci
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_REF_SLUG
       --cache-from=$REPO_URL/$BASE_IMAGE_NAME:latest
@@ -65,6 +65,8 @@ test-linux:
   stage: test
   tags:
     - kube
+  needs:
+    - build-linux
   script:
     - docker pull $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
     - docker run $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA pytest -s --cov=polyswarmclient
@@ -88,6 +90,8 @@ test-windows:
     - win-participants
   before_script:
     - echo "Skip e2e install in before_script for windows participants"
+  needs:
+    - build-windows
   script:
     - $env:DOCKER_HOST = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
@@ -102,6 +106,8 @@ e2e:
   stage: e2e
   tags:
     - kube
+  needs:
+    - test-linux
   script:
     - e2e run
 
@@ -346,8 +352,7 @@ kick-after-complete24:
   only:
     - master
   trigger: externalci/microengine-urlhaus
-  
-  
+
 kick-after-complete25:
   stage: deployment
   only:

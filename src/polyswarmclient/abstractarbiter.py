@@ -6,10 +6,10 @@ from polyswarmartifact import ArtifactType, DecodeError
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.events import VoteOnBounty, SettleBounty, WithdrawStake
+from polyswarmclient.exceptions import LowBalanceError, FatalError
 from polyswarmclient.utils import asyncio_stop
 
 logger = logging.getLogger(__name__)  # Initialize logger
-MAX_STAKE_RETRIES = 10
 
 
 class AbstractArbiter(object):
@@ -121,31 +121,22 @@ class AbstractArbiter(object):
         """
         self.bounties_pending_locks[chain] = asyncio.Lock()
 
+        await self.client.balances.get_nct_balance(chain)
         min_stake = await self.client.staking.parameters[chain].get('minimum_stake')
         staking_balance = await self.client.staking.get_total_balance(chain)
-        tries = 0
         if staking_balance < min_stake:
-            while True:
-                nct_balance = await self.client.balances.get_nct_balance(chain)
-                if self.testing > 0 and nct_balance < min_stake - staking_balance and tries >= MAX_STAKE_RETRIES:
-                    logger.error('Failed %s attempts to deposit due to low balance. Exiting', tries)
-                    exit(1)
-                elif nct_balance < min_stake - staking_balance:
-                    logger.critical('Insufficient balance to deposit stake on %s. Have %s NCT. Need %s NCT',
-                                    chain,
-                                    nct_balance,
-                                    min_stake - staking_balance)
-                    tries += 1
-                    await asyncio.sleep(tries * tries)
-                    continue
-
-                deposits = await self.client.staking.post_deposit(min_stake - staking_balance, chain)
-                logger.info('Depositing stake: %s', deposits)
-                break
+            try:
+                await self.deposit_stake(min_stake - staking_balance, chain)
+            except LowBalanceError as e:
+                raise FatalError(f'Failed to stake {min_stake - staking_balance} nct due to low balance', 1) from e
 
         if self.scanner is not None and not await self.scanner.setup():
-            logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            exit(1)
+            raise FatalError('Scanner setup failed', 1)
+
+    async def deposit_stake(self, nct, chain):
+        await self.client.balances.raise_for_low_balance(nct, chain)
+        deposits = await self.client.staking.post_deposit(nct, chain)
+        logger.info('Depositing stake: %s', deposits)
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
         """Schedule Withdraw stake for when the last settles are due
@@ -222,10 +213,7 @@ class AbstractArbiter(object):
         results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
         votes = [result.verdict for result in results]
 
-        bounty = await self.client.bounties.get_bounty(guid, chain)
-        if bounty is None:
-            logger.error('Unable to get retrieve new bounty')
-            await self.client.liveness_recorder.remove_waiting_task(guid)
+        if any((not result.bit for result in results)):
             return []
 
         bloom_parts = await self.client.bounties.get_bloom(guid, chain)
@@ -234,7 +222,7 @@ class AbstractArbiter(object):
             bounty_bloom = bounty_bloom << 256 | int(b)
 
         calculated_bloom = await self.client.bounties.calculate_bloom(uri)
-        valid_bloom = bounty and bounty_bloom == calculated_bloom
+        valid_bloom = bounty_bloom == calculated_bloom
 
         vb = VoteOnBounty(guid, votes, valid_bloom)
         self.client.schedule(vote_start, vb, chain)

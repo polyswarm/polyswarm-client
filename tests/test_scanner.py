@@ -65,8 +65,7 @@ async def test_async_scan_completes():
         assert result.verdict
 
 
-@pytest.mark.asyncio
-async def test_overwrite_scan_still_works(mocker):
+def test_overwrite_scan_still_works(mocker):
     class Scanner(AbstractScanner):
         async def scan(self, guid, artifact_type, content, metadata, chain):
             return ScanResult(bit=True)
@@ -75,7 +74,7 @@ async def test_overwrite_scan_still_works(mocker):
     mocked_warn = mocker.patch('warnings.warn')
 
     scanner = Scanner()
-    result = await scanner.scan(None, None, None, None, None)
+    result = asyncio.get_event_loop().run_until_complete(scanner.scan(None, None, None, None, None))
     assert result.bit
     mocked_warn.assert_called_once()
 

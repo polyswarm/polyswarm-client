@@ -1,14 +1,14 @@
 import asyncio
+import base58
 import functools
 import logging
 import os
 import sys
 import tempfile
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 
-import base58
-from Crypto.Hash import keccak  # noqa
+from web3 import Web3
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,8 @@ TASK_TIMEOUT = 1.0
 MAX_WAIT = int(os.getenv('WORKER_BACKOFF', '15'))
 MAX_WORKERS = 4
 
-def to_string(value):
+
+def to_bytes(value):
     if isinstance(value, bytes):
         return value
     if isinstance(value, str):
@@ -24,15 +25,15 @@ def to_string(value):
     if isinstance(value, int):
         return bytes(str(value), 'utf-8')
 
-def sha3_256(x):
-    return keccak.new(digest_bits=256, data=x).digest()
 
 def sha3(seed):
-    return sha3_256(to_string(seed))
+    return Web3.keccak(to_bytes(seed))
+
 
 def int_to_bytes(i):
     h = hex(i)[2:]
     return bytes.fromhex('0' * (64 - len(h)) + h)
+
 
 def int_from_bytes(b):
     return int.from_bytes(b, byteorder='big')
@@ -99,15 +100,6 @@ def asyncio_stop():
         task.cancel()
 
 
-def exit(exit_status):
-    """Exit the program entirely."""
-    if sys.platform == 'win32':
-        # XXX: v. hacky. We need to find out what is hanging sys.exit()
-        os._exit(exit_status)
-    else:
-        sys.exit(exit_status)
-
-
 def check_response(response):
     """Check the status of responses from polyswarmd
 
@@ -123,6 +115,34 @@ def check_response(response):
     return ret
 
 
+def is_valid_uri(uri):
+    """
+    Ensure that a given uri is valid among any of the support hash types
+    :param uri: uri to validate
+    :return: is this valid
+    """
+    return is_valid_ipfs_uri(uri) or is_valid_sha256(uri)
+
+
+def is_valid_sha256(uri):
+    """Ensure that a given uri is a valid sha256 hash by checking length, and converting to an int
+
+        Args:
+            uri (str): uri to validate
+
+        Returns:
+            bool: is this valid
+        """
+    try:
+        return len(uri) == 64 and int(uri, 16)
+    except ValueError:
+        # not a sha256 uri
+        pass
+    except Exception as err:
+        logger.exception('Unexpected error: %s', err)
+    return False
+
+
 def is_valid_ipfs_uri(ipfs_uri):
     """Ensure that a given ipfs_uri is valid by checking length and base58 encoding.
 
@@ -135,7 +155,10 @@ def is_valid_ipfs_uri(ipfs_uri):
     # TODO: Further multihash validation
     try:
         return len(ipfs_uri) < 100 and base58.b58decode(ipfs_uri)
-    except TypeError:
+    except ValueError:
+        # not an ipfs URI
+        pass
+    except (TypeError, ValueError):
         logger.error('Invalid IPFS URI: %s', ipfs_uri)
     except Exception as err:
         logger.exception('Unexpected error: %s', err)
@@ -227,3 +250,19 @@ class AsyncArtifactTempfile:
         result = await self.run_in_loop(self.file.__exit__, exc, value, tb)
         await self.close()
         return result
+
+
+def return_on_exception(exceptions=(Exception, ), default=None):
+    def outer_wrapper(func):
+        if not asyncio.iscoroutinefunction(func):
+            raise ValueError('return_on_exception decorator can only be used on coroutines')
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except exceptions:
+                return default
+
+        return wrapper
+    return outer_wrapper

@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from setuptools import find_packages, setup
 
 # The README.md will be used as the content for the PyPi package details page on the Python Package Index.
@@ -8,13 +9,16 @@ with open("README.md", "r") as readme:
 
 def requirements_entries(*entries) -> 'List[str]':
     """Returns a list of requirements matching each 'entries'"""
-    with open('requirements.txt', 'r') as f:
-        reqs = [r for r in map(str.strip, f.readlines()) if not r.startswith('#')]
-        return [
-            # find line starting w/ `entry` followed by any non-word char except . & -.
-            next(filter(re.compile('^' + re.escape(entry) + r'\b(?![-.])').match, reqs))
-            for entry in entries
-        ]
+    reqs = [
+        r.strip() for f in ('requirements.txt', 'requirements-test.txt')
+        for r in Path(f).read_text().splitlines() if not r.startswith('#')
+    ]
+    return [
+        # find line starting w/ `entry` followed by any non-word char except . & -.
+        next(filter(re.compile('^' + re.escape(entry) + r'\b(?![-.])').match, reqs))
+        for entry in entries
+    ]
+
 
 setup(name='polyswarm-client',
       version='2.8.0',
@@ -27,18 +31,19 @@ setup(name='polyswarm-client',
       license='MIT',
       include_package_data=True,
       install_requires=requirements_entries(
-          'async-timeout',
           'aiohttp',
           'aiodns',
           'aioredis',
           'aioresponses',
           'aiorwlock',
+          'cachetools',
           'asynctest',
           'backoff',
           'base58',
           'click',
-          'hypothesis',
+          'hexbytes',
           'polyswarm-artifact',
+          'polyswarm-transaction',
           'pycryptodome',
           'python-json-logger',
           'python-magic-bin',
@@ -52,12 +57,16 @@ setup(name='polyswarm-client',
       python_requires='>=3.6.5,<4',
       test_suite='tests',
       tests_require=requirements_entries(
+          'asynctest',
           'coverage',
-          'tox',
+          'deepdiff',
+          'hypothesis',
           'pytest',
           'pytest-asyncio',
           'pytest-cov',
           'pytest-timeout',
+          'pytest-mock',
+          'tox',
       ),
       entry_points={
           'console_scripts': [

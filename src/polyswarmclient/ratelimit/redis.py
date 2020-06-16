@@ -1,3 +1,5 @@
+import asyncio
+
 import aioredis
 import datetime
 import logging
@@ -5,6 +7,8 @@ import logging
 from polyswarmclient.ratelimit.abstractratelimit import AbstractRateLimit
 
 logger = logging.getLogger(__name__)
+
+TWENTY_FIVE_HOURS = 60 * 60 * 25
 
 
 class RedisDailyRateLimit(AbstractRateLimit):
@@ -19,7 +23,8 @@ class RedisDailyRateLimit(AbstractRateLimit):
         self.queue = queue
         self.limit = limit if limit is None else int(limit)
 
-    def get_daily_key(self):
+    @property
+    def daily_key(self):
         date = datetime.date.today().strftime('%Y-%m-%d')
         return f'{self.queue}:{date}'
 
@@ -34,15 +39,16 @@ class RedisDailyRateLimit(AbstractRateLimit):
             *args: None
             **kwargs: None
         """
+        loop = asyncio.get_event_loop()
         if self.limit is None:
             return True
 
-        key = self.get_daily_key()
+        key = self.daily_key
         try:
             value = await self.redis.incr(key)
             if value == 1:
                 # Give an hour extra before expiring, in case someone wants to take a look manually
-                await self.redis.expire(key, 60 * 60 * 25)
+                loop.create_task(self.expire_key(key, TWENTY_FIVE_HOURS))
 
             if value > self.limit:
                 logger.warning("Reached daily limit of %s with %s total attempts", self.limit, value)
@@ -57,3 +63,6 @@ class RedisDailyRateLimit(AbstractRateLimit):
             logger.exception('Redis connection closed')
 
         return True
+
+    async def expire_key(self, key, timeout):
+        await self.redis.expire(key, timeout)

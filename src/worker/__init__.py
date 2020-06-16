@@ -8,17 +8,17 @@ import platform
 import signal
 import time
 
-import backoff
 from aiohttp import ClientSession
+from concurrent.futures.process import ProcessPoolExecutor
 from typing import AsyncGenerator
 
 from polyswarmartifact import DecodeError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
-from polyswarmclient.exceptions import ApiKeyException
+from polyswarmclient.exceptions import ApiKeyException, FatalError, UnsupportedHashError
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
-from polyswarmclient.utils import asyncio_join, asyncio_stop, exit, MAX_WAIT, configure_event_loop
-from worker.exceptions import EmptyJobsQueueException, ExpiredException
+from polyswarmclient.utils import asyncio_join, asyncio_stop, MAX_WAIT, configure_event_loop
+from worker.exceptions import ExpiredException
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,8 @@ class Worker:
         self.scan_limit = scan_limit
         self.download_semaphore = None
         self.scan_semaphore = None
+        self.job_semaphore = None
+        self.process_pool = None
         self.tries = 0
         self.finished = False
         # Setup a liveness instance
@@ -80,7 +82,7 @@ class Worker:
             except asyncio.CancelledError:
                 logger.info('Clean exit requested, exiting')
                 asyncio_join()
-                exit(0)
+                break
             except Exception:
                 logger.exception('Unhandled exception at top level')
                 asyncio_stop()
@@ -96,15 +98,19 @@ class Worker:
         loop.run_until_complete(self.run_task())
 
     async def setup(self, loop: asyncio.AbstractEventLoop):
-        self.setup_synchronization(loop)
+        self.setup_process_pool()
+        self.setup_semaphores(loop)
         self.setup_graceful_shutdown(loop)
         await self.setup_liveness(loop)
         await self.setup_redis(loop)
         if not await self.scanner.setup():
             logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            exit(1)
+            raise FatalError('Scanner setup failed', 1)
 
-    def setup_synchronization(self, loop: asyncio.AbstractEventLoop):
+    def setup_process_pool(self):
+        self.process_pool = ProcessPoolExecutor()
+
+    def setup_semaphores(self, loop: asyncio.AbstractEventLoop):
         self.scan_semaphore = OptionalSemaphore(value=self.scan_limit, loop=loop)
         self.download_semaphore = OptionalSemaphore(value=self.download_limit, loop=loop)
         self.task_count_lock = asyncio.Condition()
@@ -169,19 +175,24 @@ class Worker:
 
     async def process_job(self, job: JobRequest, session: ClientSession):
         remaining_time = 0
+        loop = asyncio.get_event_loop()
         try:
-            await self.liveness_recorder.add_waiting_task(job.key, round(time.time()))
-            remaining_time = self.get_remaining_time(job)
-            content = await self.download(job, session)
-            scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
+            async with self.liveness_recorder.waiting_task(job.key, round(time.time())):
+                remaining_time = self.get_remaining_time(job)
+                content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
+                remaining_time = self.get_remaining_time(job)
+                scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
+
             response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                    scan_result.metadata)
-            await self.respond(job, response)
+            loop.create_task(self.respond(job, response))
             self.tries = 0
         except OSError:
             logger.exception('Redis connection down')
         except aioredis.errors.ReplyError:
             logger.exception('Redis out of memory')
+        except UnsupportedHashError:
+            logger.exception('Uri was not a supported hash', extra={'extra': job.asdict()})
         except ExpiredException:
             logger.exception(f'Received expired job', extra={'extra': job.asdict()})
         except aiohttp.ClientResponseError:
@@ -196,10 +207,7 @@ class Worker:
         except asyncio.CancelledError:
             logger.exception(f'Worker shutdown while processing job', extra={'extra': job.asdict()})
         finally:
-            await self.liveness_recorder.remove_waiting_task(job.key)
-            async with self.task_count_lock:
-                self.current_task_count -= 1
-                self.task_count_lock.notify()
+            self.job_semaphore.release()
 
     def get_remaining_time(self, job: JobRequest) -> int:
         remaining_time = int(job.ts + job.duration - math.floor(time.time()))
@@ -212,7 +220,7 @@ class Worker:
             raise ApiKeyException()
 
         headers = {'Authorization': self.api_key} if self.api_key is not None else None
-        uri = f'{job.polyswarmd_uri}/artifacts/{job.uri}/{job.index}'
+        uri = f'{job.polyswarmd_uri}/artifacts/{job.uri}/{job.index}/'
         async with self.download_semaphore:
             response = await session.get(uri, headers=headers)
             response.raise_for_status()
@@ -224,12 +232,8 @@ class Worker:
             return await self.scanner.scan(job.guid, artifact_type, artifact_type.decode_content(content), job.metadata,
                                            job.chain)
 
-    @backoff.on_exception(backoff.constant, OSError, interval=1, max_tries=3)
     async def respond(self, job: JobRequest, response: JobResponse):
-        try:
-            logger.info('Scan results for job %s', job.key, extra={'extra': response.asdict()})
-            key = f'{self.queue}_{job.guid}_{job.chain}_results'
-            await self.redis.rpush(key, json.dumps(response.asdict()))
-        except OSError:
-            logger.exception('Error pushing results for %s', job.guid)
-            raise
+        logger.info('Scan results for job %s', job.key, extra={'extra': response.asdict()})
+        key = f'{self.queue}_{job.guid}_{job.chain}_results'
+        with await self.redis as redis:
+            await redis.rpush(key, json.dumps(response.asdict()))

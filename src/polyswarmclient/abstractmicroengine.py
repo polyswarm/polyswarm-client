@@ -8,7 +8,7 @@ from polyswarmartifact.schema import verdict
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.events import RevealAssertion, SettleBounty
-from polyswarmclient.exceptions import InvalidBidError
+from polyswarmclient.exceptions import InvalidBidError, FatalError, LowBalanceError, InvalidMetadataError
 from polyswarmclient.filters.bountyfilter import BountyFilter
 from polyswarmclient.filters.confidencefilter import ConfidenceModifier
 from polyswarmclient.filters.filter import MetadataFilter
@@ -182,11 +182,10 @@ class AbstractMicroengine(object):
         """
         self.bounties_pending_locks[chain] = asyncio.Lock()
         if self.scanner is not None and not await self.scanner.setup():
-            logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            exit(1)
+            raise FatalError('Scanner setup failed', 1)
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
-        await self.client.bounties.settle_all_bounties(chain)
+        asyncio.get_event_loop().create_task(self.client.bounties.settle_all_bounties(chain))
         return []
 
     async def __handle_new_bounty(self, guid, artifact_type, author, amount, uri, expiration, metadata, block_number, txhash, chain):
@@ -229,51 +228,46 @@ class AbstractMicroengine(object):
         expiration = int(expiration)
         duration = expiration - block_number
 
-        await self.client.liveness_recorder.add_waiting_task(guid, block_number)
-        results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
-        mask = [r.bit for r in results]
-        verdicts = [r.verdict for r in results]
-        confidences = [r.confidence for r in results]
-        metadatas = [r.metadata for r in results]
-        combined_metadata = ';'.join(metadatas)
+        async with self.client.liveness_recorder.waiting_task(guid, block_number):
+            results = await self.fetch_and_scan_all(guid, artifact_type, uri, duration, metadata, chain)
+            mask = [r.bit for r in results]
+            verdicts = [r.verdict for r in results]
+            confidences = [r.confidence for r in results]
+            metadatas = [r.metadata for r in results]
+            combined_metadata = ';'.join(metadatas)
 
-        try:
-            if all([metadata and verdict.Verdict.validate(json.loads(metadata)) for metadata in metadatas]):
-                combined_metadata = json.dumps([json.loads(metadata) for metadata in metadatas])
-        except json.JSONDecodeError:
-            logger.exception('Error decoding assertion metadata %s', metadatas)
+            try:
+                if all([metadata and verdict.Verdict.validate(json.loads(metadata)) for metadata in metadatas]):
+                    combined_metadata = json.dumps([json.loads(metadata) for metadata in metadatas])
+            except json.JSONDecodeError:
+                logger.exception('Error decoding assertion metadata %s', metadatas)
 
-        if not any(mask):
-            await self.client.liveness_recorder.remove_waiting_task(guid)
-            return []
+            if not any(mask):
+                return []
 
-        assertion_fee = await self.client.bounties.parameters[chain].get('assertion_fee')
-        assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
-        arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
+            assertion_fee = await self.client.bounties.parameters[chain].get('assertion_fee')
+            assertion_reveal_window = await self.client.bounties.parameters[chain].get('assertion_reveal_window')
+            arbiter_vote_window = await self.client.bounties.parameters[chain].get('arbiter_vote_window')
 
-        bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
-        # Check that microengine has sufficient balance to handle the assertion
-        balance = await self.client.balances.get_nct_balance(chain)
-        if balance < assertion_fee + sum(bid):
-            logger.critical('Insufficient balance to post assertion for bounty on %s. Have %s NCT. Need %s NCT',
-                            chain,
-                            balance,
-                            assertion_fee + sum(bid),
-                            extra={'extra': guid})
-            if self.testing > 0:
-                exit(1)
+            bid = await self.bid(guid, mask, verdicts, confidences, metadatas, chain)
+            try:
+                await self.client.balances.raise_for_low_balance(assertion_fee + sum(bid), chain)
+            except LowBalanceError as e:
+                if self.client.tx_error_fatal:
+                    raise FatalError('Failed to assert on bounty due to low balance') from e
 
-            await self.client.liveness_recorder.remove_waiting_task(guid)
-            return []
+                return []
 
-        logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
-        nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain)
-        await self.client.liveness_recorder.remove_waiting_task(guid)
+            logger.info('Responding to %s bounty %s', artifact_type.name.lower(), guid)
+            try:
+                nonce, assertions = await self.client.bounties.post_assertion(guid, bid, mask, verdicts, chain,
+                                                                              metadata=combined_metadata)
+            except InvalidMetadataError:
+                logger.exception('Received invalid metadata')
+                return []
+
         for a in assertions:
-            # Post metadata to IPFS and post ipfs_hash as metadata, if it exists
-            ipfs_hash = await self.client.bounties.post_metadata(combined_metadata, chain)
-            metadata = ipfs_hash if ipfs_hash is not None else combined_metadata
-            ra = RevealAssertion(guid, a['index'], nonce, verdicts, metadata)
+            ra = RevealAssertion(guid, a['index'], nonce, verdicts, combined_metadata)
             self.client.schedule(expiration, ra, chain)
 
             sb = SettleBounty(guid)

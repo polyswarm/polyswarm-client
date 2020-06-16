@@ -86,27 +86,23 @@ class Producer:
         # Ensure we don't wait past the scan duration for one large artifact
         timeout = duration - self.time_to_post
         logger.info(f'Timeout set to {timeout}')
+        loop = asyncio.get_event_loop()
 
         async def wait_for_result(result_key):
             try:
-                with await self.redis as redis:
-                    while True:
-                        result = await redis.lpop(result_key)
-                        if result:
-                            break
+                while True:
+                    result = await self.redis.lpop(result_key)
+                    if result:
+                        break
 
-                        await asyncio.sleep(1)
+                    await asyncio.sleep(1)
 
-                    response = JobResponse(**json.loads(result.decode('utf-8')))
+                response = JobResponse(**json.loads(result.decode('utf-8')))
+                confidence = response.confidence if not self.confidence_modifier \
+                    else self.confidence_modifier.modify(metadata[response.index], response.confidence)
 
-                    # increase perf counter for autoscaling
-                    q_counter = f'{self.queue}_scan_result_counter'
-                    await redis.incr(q_counter)
-                    confidence = response.confidence if not self.confidence_modifier \
-                        else self.confidence_modifier.modify(metadata[response.index], response.confidence)
-
-                    return response.index, ScanResult(bit=response.bit, verdict=response.verdict, confidence=confidence,
-                                                      metadata=response.metadata)
+                return response.index, ScanResult(bit=response.bit, verdict=response.verdict, confidence=confidence,
+                                                  metadata=response.metadata)
             except aioredis.errors.ReplyError:
                 logger.exception('Redis out of memory')
             except aioredis.errors.ConnectionForcedCloseError:
@@ -138,7 +134,9 @@ class Producer:
 
         if jobs:
             try:
-                await self.redis.rpush(self.queue, *jobs)
+                # Update number of jobs sent
+                loop.create_task(self.update_job_counter(len(jobs)))
+                loop.create_task(self.send_jobs(jobs))
 
                 key = '{}_{}_{}_results'.format(self.queue, guid, chain)
                 results = await asyncio.gather(*[asyncio.wait_for(wait_for_result(key), timeout=timeout) for _ in jobs],
@@ -148,8 +146,10 @@ class Producer:
                 if len(results.keys()) < num_artifacts:
                     logger.error('Exception handling guid %s', guid)
 
+                # Update number of results from jobs
+                loop.create_task(self.update_job_results_counter(len(results.keys())))
                 # Age off old result keys
-                await self.redis.expire(key, KEY_TIMEOUT)
+                loop.create_task(self.expire_key(key, KEY_TIMEOUT))
 
                 # Any missing responses will be replaced inline with an empty scan result
                 return [results.get(i, ScanResult()) for i in range(num_artifacts)]
@@ -161,3 +161,17 @@ class Producer:
                 logger.exception('Redis connection closed')
 
         return []
+
+    async def update_job_counter(self, count):
+        job_counter = f'{self.queue}_scan_job_counter'
+        await self.redis.incrby(job_counter, count)
+
+    async def send_jobs(self, jobs):
+        await self.redis.rpush(self.queue, *jobs)
+
+    async def update_job_results_counter(self, count):
+        result_counter = f'{self.queue}_scan_result_counter'
+        await self.redis.incrby(result_counter, count)
+
+    async def expire_key(self, key, timeout):
+        self.redis.expire(key, timeout)
