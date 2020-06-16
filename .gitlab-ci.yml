@@ -226,10 +226,9 @@ release-latest-windows:
 ###############################################################
 
 kick-polyswarm-client-internal:
-  stage: postbuild
-  needs:
-    - test-windows
-    - test-linux
+  stage: deployment
+  only:
+    - master
   trigger:
     project: externalci/polyswarm-client-internal
     strategy: depend
