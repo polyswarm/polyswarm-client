@@ -174,4 +174,4 @@ class Producer:
         await self.redis.incrby(result_counter, count)
 
     async def expire_key(self, key, timeout):
-        self.redis.expire(key, timeout)
+        await self.redis.expire(key, timeout)
