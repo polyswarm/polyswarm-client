@@ -69,7 +69,10 @@ test-linux:
     - build-linux
   script:
     - docker pull $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
-    - docker run $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA pytest -s --cov=polyswarmclient
+    - docker pull mkodockx/docker-clamav
+    - docker network create test
+    - docker run -d --network test --network-alias clamav mkodockx/docker-clamav
+    - docker run --env CLAMD_HOST=clamav --network test $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA pytest -s --cov=polyswarmclient
 
 test-push-to-pypi:
   stage: test

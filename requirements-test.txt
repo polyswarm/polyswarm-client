@@ -2,6 +2,7 @@ asynctest==0.13.0
 coverage==5.1
 deepdiff==4.0.7
 hypothesis==5.16.0
+microengine-utils==1.2.2
 pytest==5.4.3
 pytest-asyncio==0.12.0
 pytest-cov==2.9.0
