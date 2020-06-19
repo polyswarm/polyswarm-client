@@ -232,9 +232,7 @@ kick-polyswarm-client-internal:
   stage: deployment
   only:
     - master
-  trigger:
-    project: externalci/polyswarm-client-internal
-    strategy: depend
+  trigger: externalci/polyswarm-client-internal
 
 kick-after-complete13:
   stage: deployment
