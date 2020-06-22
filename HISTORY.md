@@ -1,13 +1,67 @@
 # Release History
 
+### 2.8.0 (2020-6-19)
+
+* **Feature** - Change base image to `python:3.7-slim-buster`.
+* **Feature** - Add capability for synchronous scanners.
+* **Feature** - Add `--scan-time-requirement` to Worker to cull queued tasks that don't have time to finish before expriring.
+* **Feature** - Add asyncio compatible class to create temporary files `AsyncArtifactTempfile`.
+* **Feature** - Use a new session per request to PolySwarmd.
+* **Feature** - Support PolySwarmd-Fast.
+* **Feature** - Check balance earlier for Abiters.
+* **Feature** - Store balances from server in TTL cache.
+* **Fix** - Remove retries on successful transactions.
+* **Fix** - Improve backoff on requests.
+* **Fix** - Move IO to separate task if result is not read.
+* **Fix** - Resolve polyswarm-artifact and jsonschema incompatibility
+* **Fix** - Aynchronize Producer wait and Scanner duration .
+* **Fix** - Arbiters no longer vote if there are any False masks (i.e no votes or has errors).
+* **Fix** - Ambassador Queue plays nice with asyncio.
+* **Fix** - Remove extra waits in Ambassador queue.
+
+
+#### Synchronous Scanners
+
+`Scanner` implementations no longer have to be asyncio compatible.
+Starting in 2.8.0, developers can set a `ScanMode`, then overwrite either `scan_async()` or `scan_sync()`.
+These functions take the same parameters as `scan()`, which still exists.
+This change is backwards compatible, so old scanners will run as normal.
+
+
+```python
+
+from polyswarmclient.abstractscanner import AbstractScanner, ScanResult, ScanMode
+
+class Scanner(AbstractScanner):
+    def __init__():
+        super(Scanner, self).__init__(ScanMode.SYNC)
+
+    def scan_sync(...):
+        pass
+
+class Scanner(AbstractScanner):
+    def __init__():
+        super(Scanner, self).__init__(ScanMode.ASYNC)
+
+    async def scan_async(...):
+        pass
+
+```
+
+
+#### Breaking Changes
+
+1. Switched to python 3.7 where `async` is a reserved keyword
+
+
 ### 2.7.5 (2020-4-24)
 
-* **Fix** - Install backoff for pypi release 
+* **Fix** - Install backoff for pypi release
 
 ### 2.7.4 (2020-3-30)
 
 * **Fix** - Update aiohttp to 3.6.2
-* **Feature** - Create task per job in worker (up to an optional limit), rather than a set number of long running tasks 
+* **Feature** - Create task per job in worker (up to an optional limit), rather than a set number of long running tasks
 
 ### 2.7.3 (2020-1-30)
 
@@ -26,7 +80,7 @@
 
 * **Fix** - Simplify Liveliness `__hash__()` definition
 * **Feature** - Timeout scans in worker for faster recovery
-* **Feature** - Settle all participated bounties on Deprecated event 
+* **Feature** - Settle all participated bounties on Deprecated event
 * **Feature** - Only settle if participated in a bounty
 
 ### 2.7.0 (2019-12-09)
@@ -41,7 +95,7 @@
 ### 2.6.0 (2019-11-05)
 
 * **Fix** - Does not sync nonce after `timeout during wait for receipt` if the expected events are present as well
-* **Feature** - `BidStrategyBase` supports `None` in multipliers, which then uses the contract values as max or min 
+* **Feature** - `BidStrategyBase` supports `None` in multipliers, which then uses the contract values as max or min
 * **Feature** - Support maximum bid value from contract
 
 #### Breaking Changes
@@ -231,7 +285,7 @@
 * **Feature** - Add `--client-log` option for specifying `polyswarmclient` module log level
 
 The update from 1.4.3 to 1.5.0 is a breaking change for the microengine producer backend and workers.
-Existing queued jobs will not be handled by the new worker.  
+Existing queued jobs will not be handled by the new worker.
 
 ### 1.4.3 (2019-05-03)
 
