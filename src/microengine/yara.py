@@ -6,17 +6,19 @@ import yara
 from polyswarmartifact import ArtifactType
 from polyswarmartifact.schema.verdict import Verdict
 from polyswarmclient.abstractmicroengine import AbstractMicroengine
-from polyswarmclient.abstractscanner import AbstractScanner, ScanResult
+from polyswarmclient.abstractscanner import AbstractScanner, ScanResult, ScanMode
 
 logger = logging.getLogger(__name__)  # Initialize logger
 RULES_DIR = os.getenv('RULES_DIR', 'docker/yara-rules')
 
 
 class Scanner(AbstractScanner):
+
     def __init__(self):
+        super(Scanner, self).__init__(ScanMode.SYNC)
         self.rules = yara.compile(os.path.join(RULES_DIR, 'malware/MALW_Eicar'))
 
-    async def scan(self, guid, artifact_type, content, metadata, chain):
+    def scan_sync(self, guid, artifact_type, content, metadata, chain):
         """Scan an artifact with Yara.
 
         Args:
@@ -30,8 +32,8 @@ class Scanner(AbstractScanner):
             ScanResult: Result of this scan
         """
         matches = self.rules.match(data=content)
-        metadata = Verdict().set_scanner(operating_system=platform.system(),
-                                         architecture=platform.machine(),
+        metadata = Verdict().set_scanner(operating_system=self.system,
+                                         architecture=self.machine,
                                          vendor_version=yara.__version__)
         if matches:
             # author responsible for distilling multiple metadata values into a value for ScanResult

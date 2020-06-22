@@ -32,7 +32,7 @@ class Scanner(AbstractScanner):
             ScanResult: Result of this scan
         """
         results = await asyncio.gather(
-            *[backend.scan(guid, artifact_type, content, chain) for backend in self.backends]
+            *[backend.scan(guid, artifact_type, content, metadata, chain) for backend in self.backends]
         )
 
         # Unpack the results

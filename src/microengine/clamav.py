@@ -4,10 +4,10 @@ import os
 import platform
 from io import BytesIO
 
-from polyswarmartifact import ArtifactType, __version__ as psa_version
+from polyswarmartifact import ArtifactType
 from polyswarmartifact.schema.verdict import Verdict
 from polyswarmclient.abstractmicroengine import AbstractMicroengine
-from polyswarmclient.abstractscanner import AbstractScanner, ScanResult
+from polyswarmclient.abstractscanner import AbstractScanner, ScanResult, ScanMode
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,10 @@ CLAMD_TIMEOUT = 30.0
 
 class Scanner(AbstractScanner):
     def __init__(self):
+        super(Scanner, self).__init__(ScanMode.ASYNC)
         self.clamd = clamd.ClamdAsyncNetworkSocket(CLAMD_HOST, CLAMD_PORT, CLAMD_TIMEOUT)
 
-    async def scan(self, guid, artifact_type, content, metadata, chain):
+    async def scan_async(self, guid, artifact_type, content, metadata, chain):
         """Scan an artifact with ClamAV
 
         Args:
@@ -36,8 +37,8 @@ class Scanner(AbstractScanner):
         stream_result = result.get('stream', [])
 
         vendor = await self.clamd.version()
-        metadata = Verdict().set_scanner(operating_system=platform.system(),
-                                         architecture=platform.machine(),
+        metadata = Verdict().set_scanner(operating_system=self.system,
+                                         architecture=self.machine,
                                          vendor_version=vendor.strip('\n'))
         if len(stream_result) >= 2 and stream_result[0] == 'FOUND':
             metadata.set_malware_family(stream_result[1].strip('\n'))
