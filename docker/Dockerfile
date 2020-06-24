@@ -14,7 +14,7 @@ RUN apt-get update -y \
         gnupg2 \
         coreutils netbase \
         procps \
-        tar bzip2 xz-utils ncompress \
+        tar bzip2 xz-utils ncompress unzip \
         gcc libc-dev pkg-config make file \
         git-core \
         wget \
