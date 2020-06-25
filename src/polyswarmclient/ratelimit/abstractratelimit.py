@@ -8,12 +8,13 @@ class AbstractRateLimit(ABC):
     """
 
     @abstractmethod
-    async def use(self, *args, **kwargs):
+    async def use(self, *args, peek=False, **kwargs):
         """
         Mark that some value of the limit was used.
 
         Args:
             *args:
+            peek (Bool): Check rate limit without incrementing
             **kwargs:
 
         Returns: True if within limit

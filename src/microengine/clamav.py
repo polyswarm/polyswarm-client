@@ -1,7 +1,6 @@
 import clamd
 import logging
 import os
-import platform
 from io import BytesIO
 
 from polyswarmartifact import ArtifactType

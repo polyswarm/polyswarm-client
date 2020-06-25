@@ -56,8 +56,7 @@ def choose_backend(backend):
               help='Address (host:port) of polyswarmd instance')
 @click.option('--queue', envvar='QUEUE', required=True,
               help='Queue to listen for jobs on')
-@click.option('--api-key', envvar='API_KEY', default='',
-              callback=validate_apikey,
+@click.option('--api-key', envvar='API_KEY', default='',  callback=validate_apikey,
               help='API key to use with polyswarmd')
 @click.option('--backend', envvar='BACKEND', required=True,
               help='Backend to use')
@@ -72,8 +71,10 @@ def choose_backend(backend):
 @click.option('--log-format', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--scan_time_requirement', envvar='SCAN_TIME_REQUIREMENT', default=3,
-              help="Minimum number of seconds this engine requires to scan a file; artifacts with less time remaining will be ignored")
-def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format, scan_time_requirement):
+              help='Minimum number of seconds this engine requires to scan a file; artifacts with less time remaining will be ignored')
+@click.option('--daily-rate-limit', envvar='DAILY_RATE_LIMIT', default=None,
+              help='Number of daily scans allowed')
+def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format, scan_time_requirement, daily_rate_limit):
     """Entrypoint for the worker driver
     """
     if tasks != 0:
@@ -93,7 +94,8 @@ def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, sca
     init_logging(['polyswarmclient'], log_format, clientlevel)
 
     logger.info('Running worker with %s tasks', tasks if tasks > 0 else 'unlimited')
-    worker = Worker(redis_addr, queue, tasks, download_limit, scan_limit, api_key, testing, scanner, scan_time_requirement)
+    worker = Worker(redis_addr, queue, tasks, download_limit, scan_limit, api_key, testing, scanner,
+                    scan_time_requirement, daily_rate_limit)
     worker.run()
 
 
