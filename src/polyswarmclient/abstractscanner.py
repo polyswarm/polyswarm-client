@@ -3,6 +3,8 @@ import enum
 import logging
 import platform
 import warnings
+from concurrent.futures import Executor
+from typing import Optional
 
 from polyswarmartifact.schema.verdict import Verdict
 
@@ -54,8 +56,10 @@ class AbstractScanner:
 
     Overwriting `scan` directly is deprecated.
     """
-
-    def __init__(self, mode=ScanMode.ASYNC):
+    def __init__(self, mode: ScanMode = ScanMode.ASYNC):
+        """
+        :param mode: ScanMode determines sync or async execution
+        """
         self.mode = mode
         self.system = platform.system()
         self.machine = platform.machine()
@@ -75,27 +79,13 @@ class AbstractScanner:
         return True
 
     async def scan(self, guid, artifact_type, content, metadata, chain):
-        loop = asyncio.get_event_loop()
+
         if self.mode == ScanMode.ASYNC:
             return await self.scan_async(guid, artifact_type, content, metadata, chain)
         elif self.mode == ScanMode.SYNC:
-            return await loop.run_in_executor(None, self.scan_sync, guid, artifact_type, content, metadata, chain)
+            return await self.__execute_scan_sync(guid, artifact_type, content, metadata, chain)
         else:
             raise ValueError('Invalid scan mode')
-
-    def scan_sync(self, guid, artifact_type, content, metadata, chain):
-        """Override this to implement custom synchronous scanning logic
-
-        Args:
-            guid (str): GUID of the bounty under analysis, use to track artifacts in the same bounty
-            artifact_type (ArtifactType): Artifact type for the bounty being scanned
-            content (bytes): Content of the artifact to scan
-            metadata (dict): Metadata dict from the ambassador
-            chain (str): What chain are we operating on
-        Returns:
-            ScanResult: Result of this scan
-        """
-        raise NotImplementedError("Must implement scan_sync when using ScanMode.Sync")
 
     async def scan_async(self, guid, artifact_type, content, metadata, chain):
         """Override this to implement custom asynchronous scanning logic
@@ -109,4 +99,30 @@ class AbstractScanner:
         Returns:
             ScanResult: Result of this scan
         """
-        raise NotImplementedError("Must implement scan_async when using ScanMode.Async")
+        raise NotImplementedError("Must implement scan_async when using ScanMode.ASYNC")
+
+    async def __execute_scan_sync(self, guid, artifact_type, content, metadata, chain):
+        loop = asyncio.get_event_loop()
+        executor = self.get_executor()
+        if executor:
+            with executor as pool:
+                return await loop.run_in_executor(pool, self.scan_sync, guid, artifact_type, content, metadata, chain)
+        else:
+            return await loop.run_in_executor(None, self.scan_sync, guid, artifact_type, content, metadata, chain)
+
+    def get_executor(self) -> Optional[Executor]:
+        return None
+
+    def scan_sync(self, guid, artifact_type, content, metadata, chain):
+        """Override this to implement custom synchronous scanning logic
+
+        Args:
+            guid (str): GUID of the bounty under analysis, use to track artifacts in the same bounty
+            artifact_type (ArtifactType): Artifact type for the bounty being scanned
+            content (bytes): Content of the artifact to scan
+            metadata (dict): Metadata dict from the ambassador
+            chain (str): What chain are we operating on
+        Returns:
+            ScanResult: Result of this scan
+        """
+        raise NotImplementedError("Must implement scan_sync when using ScanMode.SYNC")

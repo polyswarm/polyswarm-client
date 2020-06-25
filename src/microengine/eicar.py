@@ -1,6 +1,5 @@
 import base64
 import logging
-import platform
 
 from polyswarmartifact import ArtifactType
 from polyswarmartifact.schema.verdict import Verdict
