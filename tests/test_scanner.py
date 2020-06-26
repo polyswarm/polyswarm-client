@@ -80,9 +80,6 @@ async def test_async_scan_completes(scanner_class):
         assert not result.verdict
 
 
-
-
-
 def test_overwrite_scan_still_works(mocker):
     class Scanner(AbstractScanner):
         async def scan(self, guid, artifact_type, content, metadata, chain):
@@ -97,3 +94,21 @@ def test_overwrite_scan_still_works(mocker):
     mocked_warn.assert_called_once()
 
 
+@pytest.mark.asyncio
+@pytest.mark.timeout(3)
+async def test_scanner_context_manager():
+    setup = asyncio.Event()
+    teardown = asyncio.Event()
+
+    class Scanner(AbstractScanner):
+        async def setup(self):
+            setup.set()
+            return True
+
+        async def teardown(self):
+            teardown.set()
+
+    async with Scanner():
+        await setup.wait()
+
+    await teardown.wait()

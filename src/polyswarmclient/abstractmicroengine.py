@@ -32,6 +32,7 @@ class AbstractMicroengine(object):
         self.confidence_modifier = confidence_modifier
 
         self.client.on_run.register(self.__handle_run)
+        self.client.on_stop.register(self.__handle_stop)
         self.client.on_new_bounty.register(self.__handle_new_bounty)
         self.client.on_reveal_assertion_due.register(self.__handle_reveal_assertion)
         self.client.on_quorum_reached.register(self.__handle_quorum_reached)
@@ -183,6 +184,10 @@ class AbstractMicroengine(object):
         self.bounties_pending_locks[chain] = asyncio.Lock()
         if self.scanner is not None and not await self.scanner.setup():
             raise FatalError('Scanner setup failed', 1)
+
+    async def __handle_stop(self):
+        if self.scanner is not None:
+            await self.scanner.teardown()
 
     async def __handle_deprecated(self, rollover, block_number, txhash, chain):
         asyncio.get_event_loop().create_task(self.client.bounties.settle_all_bounties(chain))

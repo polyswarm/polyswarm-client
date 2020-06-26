@@ -3,7 +3,6 @@ import hashlib
 import logging
 import magic
 import os
-import time
 
 from abc import ABC, abstractmethod
 

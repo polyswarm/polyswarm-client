@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from polyswarmclient import BidStrategyBase
@@ -5,6 +7,7 @@ from polyswarmclient.abstractmicroengine import AbstractMicroengine
 from microengine.bidstrategy.conservative import BidStrategy as ConservativeStrategy
 from microengine.bidstrategy.default import BidStrategy as DefaultStrategy
 from microengine.bidstrategy.aggressive import BidStrategy as AggressiveStrategy
+from polyswarmclient.abstractscanner import AbstractScanner
 
 from tests.utils.fixtures import mock_client
 
@@ -278,3 +281,18 @@ async def test_mask_0_bid_value_0():
     bid = await bid_strategy.bid('test', [False], [True], [1.0], [''], .0625 * 10 ** 18, 1 * 10 ** 18, 'side')
     # assert
     assert bid == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(3)
+async def test_stop_calls_scanner_teardown(mock_client):
+    teardown = asyncio.Event()
+
+    class Scanner(AbstractScanner):
+
+        async def teardown(self):
+            teardown.set()
+
+    Microengine(mock_client,  scanner=Scanner(), bid_strategy=DefaultStrategy())
+    await mock_client.on_stop.run()
+    await teardown.wait()

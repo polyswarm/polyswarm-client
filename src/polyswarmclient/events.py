@@ -71,6 +71,19 @@ class OnRunCallback(Callback):
         return await super().run(chain)
 
 
+class OnStopCallback(Callback):
+    """Called when the client is stopping
+
+        This can happen on errors, or due to a signal
+    """
+
+    async def run(self):
+        """Run the registered callbacks
+
+        """
+        return await super().run()
+
+
 class OnNewBlockCallback(Callback):
     """Called upon receiving a new block, scheduled events triggered separately"""
 
@@ -116,6 +129,7 @@ class OnNewAssertionCallback(Callback):
             bounty_guid (str): Bounty GUID
             author (str): Author of the assertion
             index (int): Index of the assertion within the bounty
+            bid (List[int]): List of bid values per artifact
             mask (List[bool]): Bitmask indicating which artifacts are being asserted on
             commitment (int): Commitment hash representing the assertion's confidential verdicts
             block_number (int): Block number the assertion was posted on

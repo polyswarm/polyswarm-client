@@ -24,6 +24,7 @@ class AbstractArbiter(object):
             self.valid_artifact_types = artifact_types
 
         self.client.on_run.register(self.__handle_run)
+        self.client.on_stop.register(self.__handle_stop)
         self.client.on_new_bounty.register(self.__handle_new_bounty)
         self.client.on_deprecated.register(self.__handle_deprecated)
         self.client.on_vote_on_bounty_due.register(self.__handle_vote_on_bounty_due)
@@ -132,6 +133,10 @@ class AbstractArbiter(object):
 
         if self.scanner is not None and not await self.scanner.setup():
             raise FatalError('Scanner setup failed', 1)
+
+    async def __handle_stop(self):
+        if self.scanner is not None:
+            await self.scanner.teardown()
 
     async def deposit_stake(self, nct, chain):
         await self.client.balances.raise_for_low_balance(nct, chain)

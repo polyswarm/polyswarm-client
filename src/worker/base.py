@@ -13,7 +13,7 @@ from typing import AsyncGenerator
 
 from polyswarmartifact import DecodeError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
-from polyswarmclient.exceptions import ApiKeyException, FatalError
+from polyswarmclient.exceptions import ApiKeyException, FatalError, ScannerSetupFailedError
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
 from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
@@ -102,9 +102,6 @@ class Worker:
         self.setup_graceful_shutdown(loop)
         await self.setup_liveness(loop)
         await self.setup_redis(loop)
-        if not await self.scanner.setup():
-            logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
-            raise FatalError('Scanner setup failed', 1)
 
     def setup_synchronization(self, loop: asyncio.AbstractEventLoop):
         self.scan_semaphore = OptionalSemaphore(value=self.scan_limit, loop=loop)
@@ -143,9 +140,15 @@ class Worker:
         loop = asyncio.get_event_loop()
         conn = aiohttp.TCPConnector(limit=100)
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
-        async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
-            async for job in self.get_jobs():
-                loop.create_task(self.process_job(job, session))
+        try:
+            async with self.scanner:
+                async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+                    async for job in self.get_jobs():
+                        loop.create_task(self.process_job(job, session))
+
+        except ScannerSetupFailedError:
+            logger.critical('Scanner instance reported unsuccessful setup. Exiting.')
+            raise FatalError('Scanner setup failed', 1)
 
     async def get_jobs(self) -> AsyncGenerator[JobRequest, None]:
         while not self.finished:

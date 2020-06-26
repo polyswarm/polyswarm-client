@@ -7,6 +7,7 @@ from concurrent.futures import Executor
 from typing import Optional
 
 from polyswarmartifact.schema.verdict import Verdict
+from polyswarmclient.exceptions import ScannerSetupFailedError
 
 logger = logging.getLogger(__name__)  # Initialize logger
 
@@ -72,11 +73,21 @@ class AbstractScanner:
         """Override this method to implement custom setup logic.
 
         This is run immediately after the Scanner class is instantiated and before any calls to the scan() method.
+        This can be called multiple times, due to exception handling restarting the worker/microengine/arbiter
 
         Returns:
             status (bool): Did setup complete successfully?
         """
         return True
+
+    async def teardown(self):
+        """
+        Override this method to do any cleanup when the scanner is being shut down.
+
+        This can be called multiple times, due to exception handling restarting the worker/microengine/arbiter
+        There is an expectation that calling `setup()` again will put the AbstractScanner implementation back into working order
+        """
+        pass
 
     async def scan(self, guid, artifact_type, content, metadata, chain):
 
@@ -126,3 +137,10 @@ class AbstractScanner:
             ScanResult: Result of this scan
         """
         raise NotImplementedError("Must implement scan_sync when using ScanMode.SYNC")
+
+    async def __aenter__(self):
+        if not await self.setup():
+            raise ScannerSetupFailedError
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.teardown()

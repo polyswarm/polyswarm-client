@@ -69,6 +69,12 @@ class UnsupportedHashError(PolyswarmClientException):
     """
 
 
+class ScannerSetupFailedError(PolyswarmClientException):
+    """
+    Scanner reported an unsuccessful setup
+    """
+
+
 class FatalError(ClickException):
     def __init__(self, message='', exit_code=0):
         super().__init__(message)

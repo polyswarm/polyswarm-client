@@ -75,6 +75,7 @@ class Client(object):
 
         # Events from client
         self.on_run = events.OnRunCallback()
+        self.on_stop = events.OnStopCallback()
 
         # Events from polyswarmd
         self.on_new_block = events.OnNewBlockCallback()
@@ -151,6 +152,7 @@ class Client(object):
             if listen_for_events:
                 await asyncio.wait([self.listen_for_events(chain) for chain in chains])
         finally:
+            await self.on_stop.run()
             self.clear_sub_clients()
 
     def clear_sub_clients(self):
