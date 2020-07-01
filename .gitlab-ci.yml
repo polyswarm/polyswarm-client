@@ -113,6 +113,9 @@ e2e:
     - kube
   needs:
     - test-linux
+  except:
+    variables: 
+      - $SKIP_E2E
   script:
     - e2e run
 
