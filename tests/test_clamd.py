@@ -1,13 +1,14 @@
 import aiohttp
 import pytest
-import platform
 
 from microengine_utils.malwarerepoclient import DummyMalwareRepoClient
 from polyswarmartifact import ArtifactType
 from microengine.clamav import Scanner
 
+from tests.utils.fixtures import not_listening_on_port
 
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+
+@pytest.mark.skipif(not_listening_on_port(3310), reason='ClamAV is not running')
 @pytest.mark.asyncio
 async def test_scan_random_mal_not():
     scanner = Scanner()

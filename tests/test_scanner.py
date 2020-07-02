@@ -91,7 +91,7 @@ def test_overwrite_scan_still_works(mocker):
     scanner = Scanner()
     result = asyncio.get_event_loop().run_until_complete(scanner.scan(None, None, None, None, None))
     assert result.bit
-    mocked_warn.assert_called_once()
+    mocked_warn.assert_called()
 
 
 @pytest.mark.asyncio

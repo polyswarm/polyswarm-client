@@ -1,5 +1,5 @@
-import pytest
 from polyswarmclient.utils import sha3
+
 
 def test_verifier_sha3():
     ABIS = [(b'\xa9\x05\x9c\xbb', ('transfer', ['address', 'uint256'])),

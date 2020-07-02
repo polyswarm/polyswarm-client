@@ -1,6 +1,6 @@
-import platform
 import pytest
 from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
+from tests.utils.fixtures import not_listening_on_port
 
 
 @pytest.fixture()
@@ -18,7 +18,7 @@ async def daily_limit(event_loop, redis_uri):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 async def test_peek_works_without_key(daily_limit):
     daily_limit.queue = 'test_peek_works_without_key'
     daily_limit.limit = 1
@@ -29,7 +29,7 @@ async def test_peek_works_without_key(daily_limit):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 async def test_peek_works_without_incrementing(daily_limit):
     daily_limit.queue = 'test_peek_works_without_incrementing'
     daily_limit.limit = 10
@@ -43,7 +43,7 @@ async def test_peek_works_without_incrementing(daily_limit):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 async def test_peek_false_after_reaching_limit(daily_limit):
     daily_limit.queue = 'test_peek_false_after_reaching_limit'
     daily_limit.limit = 10
@@ -56,7 +56,7 @@ async def test_peek_false_after_reaching_limit(daily_limit):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 async def test_use_increments(daily_limit):
     daily_limit.queue = 'test_use_increments'
     daily_limit.limit = 10
@@ -67,7 +67,7 @@ async def test_use_increments(daily_limit):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 async def test_increment_up_to_limit(daily_limit):
     daily_limit.queue = 'test_increment_up_to_limit'
     daily_limit.limit = 10
@@ -78,7 +78,7 @@ async def test_increment_up_to_limit(daily_limit):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(platform.system().lower() == 'windows', reason='ClamAV does not run on windows')
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 async def test_use_returns_false_after_limit(daily_limit):
     daily_limit.queue = 'test_use_returns_false_after_limit'
     daily_limit.limit = 10

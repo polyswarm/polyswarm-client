@@ -5,8 +5,9 @@ import tempfile
 import sys
 import base58
 import json
-import random
 import os
+import psutil
+import random
 from web3 import Web3
 from aioresponses import aioresponses
 from asynctest.mock import patch
@@ -220,3 +221,8 @@ def mock_client(event_loop):
     client.stop()
     asyncio_stop()
     asyncio_join()
+
+
+def not_listening_on_port(port):
+    return port not in [conn.laddr.port for conn in psutil.net_connections()]
+
