@@ -11,6 +11,7 @@ from polyswarmartifact import ArtifactType
 from polyswarmclient.filters.filter import MetadataFilter
 from polyswarmclient.producer.job import JobRequest
 from polyswarmclient.producer.jobprocessor import JobProcessor
+from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +28,37 @@ class Producer:
         self.queue = queue
         self.time_to_post = time_to_post
         self.bounty_filter = bounty_filter
+        self.confidence_modifier = confidence_modifier
         self.redis = None
         self.rate_limit = rate_limit
-        self.job_processor = JobProcessor(redis_uri, queue, confidence_modifier)
+        self.rate_limiter = None
+        self.job_processor = None
 
     async def start(self):
+        self.redis = await aioredis.create_redis_pool(self.redis_uri)
+        await self._setup_rate_limit(self.redis)
+        await self._setup_job_processor(self.redis)
+
+    async def _setup_rate_limit(self, redis):
         if self.rate_limit is not None:
-            await self.rate_limit.setup()
+            self.rate_limiter = RedisDailyRateLimit(redis, self.queue, self.rate_limit)
+
+    async def _setup_job_processor(self, redis):
+        self.job_processor = JobProcessor(redis, self.queue, self.confidence_modifier,
+                                          redis_error_callback=self.__reset_redis)
+        asyncio.get_event_loop().create_task(self.job_processor.run())
+
+    async def __reset_redis(self):
+        self.redis.close()
+        await self.redis.wait_closed()
         self.redis = await aioredis.create_redis_pool(self.redis_uri)
 
-        # Start job processor
-        await self.job_processor.setup()
-        asyncio.get_event_loop().create_task(self.job_processor.run())
+        # Update job processor
+        await self.job_processor.set_redis(self.redis)
+
+        # Update rate_limiter
+        if self.rate_limiter:
+            self.rate_limiter.set_redis(self.redis)
 
     async def scan(self, guid, artifact_type, uri, duration, metadata, chain):
         """Creates a set of jobs to scan all the artifacts at the given URI that are passed via Redis to workers
@@ -64,27 +84,27 @@ class Producer:
         metadata = MetadataFilter.pad_metadata(metadata, num_artifacts)
 
         jobs = []
-        for i in range(num_artifacts):
-            if (self.bounty_filter is None or self.bounty_filter.is_allowed(metadata[i])) \
-             and (self.rate_limit is None or await self.rate_limit.use()):
-                job = JobRequest(polyswarmd_uri=self.client.polyswarmd_uri,
-                                 guid=guid,
-                                 index=i,
-                                 uri=uri,
-                                 artifact_type=artifact_type.value,
-                                 duration=timeout,
-                                 metadata=metadata[i],
-                                 chain=chain,
-                                 ts=int(time.time()))
-                jobs.append(job)
+        try:
+            for i in range(num_artifacts):
+                if (self.bounty_filter is None or self.bounty_filter.is_allowed(metadata[i])) \
+                 and (self.rate_limit is None or await self.rate_limit.use()):
+                    job = JobRequest(polyswarmd_uri=self.client.polyswarmd_uri,
+                                     guid=guid,
+                                     index=i,
+                                     uri=uri,
+                                     artifact_type=artifact_type.value,
+                                     duration=timeout,
+                                     metadata=metadata[i],
+                                     chain=chain,
+                                     ts=int(time.time()))
+                    jobs.append(job)
 
-        if jobs:
-            try:
+            if jobs:
                 # Update number of jobs sent
-                loop.create_task(self.update_job_counter(len(jobs)))
+                loop.create_task(self._update_job_counter(len(jobs)))
 
                 # Send jobs as json string to backend
-                loop.create_task(self.send_jobs([json.dumps(job.asdict()) for job in jobs]))
+                loop.create_task(self._send_jobs([json.dumps(job.asdict()) for job in jobs]))
 
                 # Send jobs to job processor
                 future = Future()
@@ -92,25 +112,28 @@ class Producer:
                 await self.job_processor.register_jobs(guid, key, jobs, future)
 
                 # Age off old result keys
-                loop.create_task(self.expire_key(key, KEY_TIMEOUT))
+                loop.create_task(self._expire_key(key, KEY_TIMEOUT))
 
                 # Wait for results from job processor
                 return await future
-            except OSError:
-                logger.exception('Redis connection down')
-            except aioredis.errors.ReplyError:
-                logger.exception('Redis out of memory')
-            except aioredis.errors.ConnectionForcedCloseError:
-                logger.exception('Redis connection closed')
+        except OSError:
+            logger.exception('Redis connection down')
+            await self.__reset_redis()
+        except aioredis.errors.ReplyError:
+            logger.exception('Redis out of memory')
+            await self.__reset_redis()
+        except aioredis.errors.ConnectionForcedCloseError:
+            logger.exception('Redis connection closed')
+            await self.__reset_redis()
 
         return []
 
-    async def update_job_counter(self, count):
+    async def _update_job_counter(self, count):
         job_counter = f'{self.queue}_scan_job_counter'
         await self.redis.incrby(job_counter, count)
 
-    async def send_jobs(self, jobs):
+    async def _send_jobs(self, jobs):
         await self.redis.rpush(self.queue, *jobs)
 
-    async def expire_key(self, key, timeout):
+    async def _expire_key(self, key, timeout):
         await self.redis.expire(key, timeout)

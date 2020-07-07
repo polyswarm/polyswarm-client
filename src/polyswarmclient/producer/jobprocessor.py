@@ -1,12 +1,11 @@
 import aioredis
-import aiorwlock
 import asyncio
 import json
 import logging
 
 from aioredis import Redis
 from asyncio import Future, Task
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Coroutine, Callable
 
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.filters.confidencefilter import ConfidenceModifier
@@ -106,29 +105,29 @@ class JobProcessor:
     job_lock: Optional[asyncio.Lock]
     redis: Optional[Redis]
     task = Optional[Task]
+    reset_callback = Optional[Callable[[], Coroutine]]
 
-    def __init__(self, redis_uri: str, queue: str, confidence_modifier: Optional[ConfidenceModifier], period: float = .5):
-        self.redis_uri = redis_uri
+    def __init__(self, redis: Redis, queue: str, confidence_modifier: Optional[ConfidenceModifier], period: float = .5,
+                 redis_error_callback: Optional[Callable[[], Coroutine]] = None):
+        self.redis = redis
         self.queue = queue
         self.confidence_modifier = confidence_modifier
         self.period = period
+        self.reset_callback = redis_error_callback
         self.pending_jobs = {}
         self.job_lock = None
-        self.redis = None
         self.task = None
-
-    async def setup(self):
-        """
-        Sets up the lock and redis connection
-        """
-        self.job_lock = asyncio.Lock()
-        self.redis = await aioredis.create_redis_pool(self.redis_uri)
 
     async def run(self):
         """
         Start the JobProcessor in a new task that will process any pending jobs forever
+
         """
+        if self.redis is None:
+            raise ValueError('Must set redis client prior to run')
+
         loop = asyncio.get_event_loop()
+        self.job_lock = asyncio.Lock()
         self.task = loop.create_task(self.__process())
 
     def stop(self):
@@ -136,7 +135,13 @@ class JobProcessor:
         Stop processing jobs
         """
         self.task.cancel()
-        self.redis.close()
+
+    async def set_redis(self, redis):
+        """
+        Update the redis connection,
+        """
+        async with self.job_lock:
+            self.redis = redis
 
     async def register_jobs(self, guid: str, key: str, jobs: List[JobRequest], future: Future):
         """
@@ -192,15 +197,8 @@ class JobProcessor:
                 reset = True
                 logger.exception("Exception fetching results", exc_info=result)
 
-        if reset:
-            async with self.job_lock:
-                await self.reset_redis()
-
-    async def reset_redis(self):
-        logger.debug('Restarting Redis connections')
-        self.redis.close()
-        await self.redis.wait_closed()
-        self.redis = await aioredis.create_redis_pool(self.redis_uri)
+        if reset and self.reset_callback:
+            await self.reset_callback()
 
     async def __handle_jobs_with_all_results(self):
         """
@@ -219,8 +217,7 @@ class JobProcessor:
         """
         Updates the counter of results, tells the pending_job to finish, and removes it from the list of pending jobs
 
-        :param guid: guid to respond to
-        :param pending_job: PendingJob that is being finished
+        :param finished_jobs: List of PendingJobs that are finished
         """
         # Update Results counter for scaling
         loop = asyncio.get_event_loop()
@@ -244,7 +241,6 @@ class JobProcessor:
             await self.redis.incrby(result_counter, count)
 
     async def __aenter__(self):
-        await self.setup()
         await self.run()
         return self
 

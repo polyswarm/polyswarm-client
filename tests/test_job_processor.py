@@ -1,4 +1,3 @@
-import aioredis
 import asyncio
 import asynctest
 import json
@@ -10,32 +9,16 @@ from asyncio import Future
 
 from polyswarmclient.producer import JobProcessor, JobRequest, JobResponse
 from polyswarmartifact import ArtifactType
-from tests.utils.fixtures import not_listening_on_port
+from tests.utils.fixtures import not_listening_on_port, redis_client
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
-def redis_uri():
-    return 'redis://redis:6379'
-
-
-@pytest.fixture()
-@pytest.mark.asyncio
-async def redis_client(event_loop, redis_uri):
-    redis = await aioredis.create_redis_pool(redis_uri)
-    with await redis as redis_client:
-        yield redis_client
-
-    redis.close()
-    await redis.wait_closed()
-
-
 @pytest.fixture(scope='function')
 @pytest.mark.asyncio
-async def job_processor(event_loop, redis_uri) -> JobProcessor:
+async def job_processor(event_loop, redis_client) -> JobProcessor:
     asyncio.set_event_loop(event_loop)
-    async with JobProcessor(redis_uri, 'QUEUE', None) as processor:
+    async with JobProcessor(redis_client, 'QUEUE', None) as processor:
         yield processor
 
 
@@ -101,8 +84,9 @@ async def test_results_after_timeout(redis_client, job_processor):
 @pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_redis_error_recovery(job_processor, mocker):
-    job_processor.reset_redis = asynctest.CoroutineMock()
+async def test_redis_error_recovery(job_processor):
+    reset_redis = asynctest.CoroutineMock()
+    job_processor.reset_callback = reset_redis
     job = JobRequest('polyswarmd-addr', 'guid', 0, 'uri', ArtifactType.FILE.value, 1, None, 'side', int(time.time()))
 
     future = Future()
@@ -112,7 +96,7 @@ async def test_redis_error_recovery(job_processor, mocker):
     await job_processor.register_jobs('guid', 'result_key', [job], future)
     await job_processor.fetch_results()
 
-    job_processor.reset_redis.assert_called()
+    reset_redis.assert_called()
 
 
 @pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')

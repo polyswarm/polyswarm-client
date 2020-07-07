@@ -5,7 +5,6 @@ from polyswarmartifact import ArtifactType
 
 from polyswarmclient.abstractmicroengine import AbstractMicroengine
 from polyswarmclient.producer import Producer
-from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +31,15 @@ class Microengine(AbstractMicroengine):
         self.redis = None
 
     async def __handle_run(self, chain):
-        if self.redis is None:
+        if REDIS_ADDR.startswith('redis://'):
+            redis_uri = REDIS_ADDR
+        else:
             redis_uri = 'redis://' + REDIS_ADDR
-            rate_limit = RedisDailyRateLimit(redis_uri, QUEUE, RATE_LIMIT)
-            self.producer = Producer(self.client, redis_uri, QUEUE, TIME_TO_POST_ASSERTION,
-                                     bounty_filter=self.bounty_filter, confidence_modifier=self.confidence_modifier,
-                                     rate_limit=rate_limit)
-            await self.producer.start()
+
+        self.producer = Producer(self.client, redis_uri, QUEUE, TIME_TO_POST_ASSERTION,
+                                 bounty_filter=self.bounty_filter, confidence_modifier=self.confidence_modifier,
+                                 rate_limit=RATE_LIMIT)
+        await self.producer.start()
 
     async def fetch_and_scan_all(self, guid, artifact_type, uri, duration, metadata, chain):
         """Overrides the default fetch logic to embed the URI and index rather than downloading on producer side

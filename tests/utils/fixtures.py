@@ -1,3 +1,4 @@
+import aioredis
 import asyncio
 import base64
 import pytest
@@ -221,6 +222,22 @@ def mock_client(event_loop):
     client.stop()
     asyncio_stop()
     asyncio_join()
+
+
+@pytest.fixture()
+def redis_uri():
+    return 'redis://redis:6379'
+
+
+@pytest.fixture()
+@pytest.mark.asyncio
+async def redis_client(event_loop):
+    redis = await aioredis.create_redis_pool('redis://redis:6379')
+    with await redis as redis_client:
+        yield redis_client
+
+    redis.close()
+    await redis.wait_closed()
 
 
 def not_listening_on_port(port):

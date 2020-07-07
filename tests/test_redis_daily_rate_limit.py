@@ -1,17 +1,12 @@
 import pytest
 from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
-from tests.utils.fixtures import not_listening_on_port
-
-
-@pytest.fixture()
-def redis_uri():
-    return 'redis://redis:6379'
+from tests.utils.fixtures import not_listening_on_port, redis_client
 
 
 @pytest.fixture()
 @pytest.mark.asyncio
-async def daily_limit(event_loop, redis_uri):
-    daily_limit = RedisDailyRateLimit(redis_uri, '', 0)
+async def daily_limit(event_loop, redis_client):
+    daily_limit = RedisDailyRateLimit(redis_client, '', 0)
     yield daily_limit
     daily_limit.redis.close()
     await daily_limit.redis.wait_closed()

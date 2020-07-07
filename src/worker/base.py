@@ -133,8 +133,7 @@ class Worker:
     async def setup_redis(self, loop: asyncio.AbstractEventLoop):
         self.redis = await aioredis.create_redis_pool(self.redis_uri, loop=loop)
         queue = f'{self.queue}_backend'
-        self.redis_daily_rate_limit = RedisDailyRateLimit(self.redis_uri, queue, self.daily_rate_limit)
-        await self.redis_daily_rate_limit.setup()
+        self.redis_daily_rate_limit = RedisDailyRateLimit(self.redis, queue, self.daily_rate_limit)
 
     async def run_task(self):
         loop = asyncio.get_event_loop()

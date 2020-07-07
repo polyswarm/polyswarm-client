@@ -17,19 +17,18 @@ class RedisDailyRateLimit(AbstractRateLimit):
 
         This implementation is used in the producer and worker since they use Redis already.
     """
-    def __init__(self, redis_uri, queue, limit):
-        self.redis_uri = redis_uri
-        self.redis = None
+    def __init__(self, redis, queue, limit):
+        self.redis = redis
         self.queue = queue
         self.limit = limit if limit is None else int(limit)
+
+    def set_redis(self, redis):
+        self.redis = redis
 
     @property
     def daily_key(self):
         date = datetime.date.today().strftime('%Y-%m-%d')
         return f'{self.queue}:{date}'
-
-    async def setup(self):
-        self.redis = await aioredis.create_redis_pool(self.redis_uri)
 
     async def use(self, *args, peek=False, **kwargs):
         """
@@ -63,10 +62,13 @@ class RedisDailyRateLimit(AbstractRateLimit):
         # We don't want to be DOS ourselves if redis goes down
         except OSError:
             logger.exception('Redis connection down')
+            raise
         except aioredis.errors.ReplyError:
             logger.exception('Redis out of memory')
+            raise
         except aioredis.errors.ConnectionForcedCloseError:
             logger.exception('Redis connection closed')
+            raise
 
         return True
 
