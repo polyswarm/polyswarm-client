@@ -87,7 +87,7 @@ class Producer:
         try:
             for i in range(num_artifacts):
                 if (self.bounty_filter is None or self.bounty_filter.is_allowed(metadata[i])) \
-                 and (self.rate_limit is None or await self.rate_limit.use()):
+                 and (self.rate_limiter is None or await self.rate_limiter.use()):
                     job = JobRequest(polyswarmd_uri=self.client.polyswarmd_uri,
                                      guid=guid,
                                      index=i,
