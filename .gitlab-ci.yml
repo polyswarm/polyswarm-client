@@ -16,12 +16,24 @@ variables:
 
 default:
   before_script:
-    - pip install $END_TO_END_LIB@$CI_COMMIT_REF_NAME || pip install $END_TO_END_LIB
+    - pip install -q --upgrade pip
+    - pip install -q $END_TO_END_LIB@$CI_COMMIT_REF_NAME || pip install -q $END_TO_END_LIB
     - e2e init
 
 ###############################################################
 # Build Stage (jobs inside a stage run in parallel)
 ###############################################################
+dev-pypi:
+  tags:
+    - kube
+  stage: build
+  before_script:
+    - pip3 install -q --upgrade pip setuptools twine wheel bump2version
+  script:
+    - SHORT_SHA=$(git rev-parse --short HEAD) bumpversion --no-commit --no-tag local
+    - python setup.py -q bdist_wheel
+    - twine upload --skip-existing --disable-progress-bar --non-interactive dist/*
+
 build-linux:
   stage: build
   tags:
@@ -161,27 +173,19 @@ release-latest-linux:
     - docker login -u $CI_CUSTOM_DOCKER_HUB_USERNAME -p $CI_CUSTOM_DOCKER_HUB_PASSWORD
     - docker push polyswarm/$BASE_IMAGE_NAME:latest
 
-push-to-pypi:
-  stage: release
+release-pypi:
   tags:
     - kube
-  only:
-    - tags
+  stage: release
   script:
-    - python setup.py sdist bdist_wheel
-
-    # check git tag version vs setup.py version. bail if not equal.
-    - >-
-      tagver=$(git describe --abbrev=0 --tags)
-      setupver=$(grep "version=" setup.py | cut -d"'" -f 2)
-
-      if [ $tagver != $setupver ]; then
-        echo "git tag version ($tagver) does not match setup.py version ($setupver)"
-        exit 1
-      fi
-
-    # using env variables from Gitlab: TWINE_USERNAME, TWINE_PASSWORD, TWINE_REPOSITORY_URL
-    - twine upload dist/*
+    # release to internal pypi but do not tag yet
+    - e2e release --skip-tag --remote https://github.com/polyswarm/$CI_PROJECT_NAME.git
+    # release to public pypi and tag
+    - e2e release
+      -u $PUBLIC_TWINE_USERNAME
+      -p $PUBLIC_TWINE_PASSWORD
+      -r $PUBLIC_TWINE_REPOSITORY_URL
+      --remote https://github.com/polyswarm/$CI_PROJECT_NAME.git
 
 release-tag-windows:
   stage: release
