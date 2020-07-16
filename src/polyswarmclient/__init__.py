@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 MAX_ARTIFACTS = 256
 RATE_LIMIT_SLEEP = 2.0
+MAX_BACKOFF = 30
 
 
 class Client(object):
@@ -95,7 +96,7 @@ class Client(object):
         self.on_withdraw_stake_due = events.OnWithdrawStakeDueCallback()
         utils.configure_event_loop()
 
-    @backoff.on_exception(backoff.expo, Exception)
+    @backoff.on_exception(backoff.expo, Exception, max_time=MAX_BACKOFF)
     def run(self, chains=None):
         """Run the main event loop
 
@@ -509,7 +510,7 @@ class Client(object):
                     self.on_withdraw_stake_due.run(amount=task.amount, chain=chain))
 
     @backoff.on_exception(backoff.expo, (websockets.exceptions.ConnectionClosed, OSError, asyncio.TimeoutError,
-                                         websockets.exceptions.InvalidHandshake))
+                                         websockets.exceptions.InvalidHandshake), max_time=MAX_BACKOFF)
     async def listen_for_events(self, chain):
         """Listen for events via websocket connection to polyswarmd
         Args:
