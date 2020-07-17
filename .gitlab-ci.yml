@@ -42,6 +42,7 @@ build-linux:
     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
     - sed "s#FROM polyswarm/polyswarm-transaction#FROM $REPO_URL/polyswarm-transaction#" docker/Dockerfile > docker/Dockerfile.ci
     - docker build
+      --build-arg PIP_INDEX_URL
       -f docker/Dockerfile.ci
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_SHA
       -t $REPO_URL/$BASE_IMAGE_NAME:$CI_COMMIT_REF_SLUG
