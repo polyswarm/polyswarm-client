@@ -29,7 +29,6 @@ ARG PIP_INDEX_URL="https://pypi.python.org/simple"
 RUN pip3 install --no-cache-dir -U wheel setuptools \
     && pip3 install --no-cache-dir \
       cytoolz[cython] \
-      /tmp/polyswarm-transaction \
       -r requirements.txt \
       -r requirements-test.txt \
       . \
