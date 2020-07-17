@@ -100,7 +100,12 @@ test-push-to-pypi:
     - python setup.py sdist bdist_wheel
     # Using env variables from Gitlab: TWINE_USERNAME, TWINE_PASSWORD, TWINE_REPOSITORY_URL
     # Will try to upload on V.V.VrcN tags, but will not fail if the version already exists in test.pypi.org
-    - twine upload --skip-existing --repository-url $TWINE_REPOSITORY_URL_TEST -u $TWINE_USERNAME_TEST -p $TWINE_PASSWORD_TEST dist/*
+    - twine upload
+      --skip-existing
+      --repository-url $PUBLIC_TWINE_REPOSITORY_URL_TEST
+      -u $PUBLIC_TWINE_USERNAME_TEST
+      -p $PUBLIC_TWINE_PASSWORD_TEST
+      dist/*
 
 test-windows:
   stage: test
