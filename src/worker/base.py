@@ -72,26 +72,19 @@ class Worker:
         self.liveness_recorder = LocalLivenessRecorder()
 
     def run(self):
-        while not self.finished:
-            configure_event_loop()
-            loop = asyncio.get_event_loop()
-            try:
-                self.start(loop)
-                # This stops any leftover tasks after out main task finishes
-                asyncio_stop()
-            except asyncio.CancelledError:
-                logger.info('Clean exit requested, exiting')
-                asyncio_join()
-                break
-            except Exception:
-                logger.exception('Unhandled exception at top level')
-                asyncio_stop()
-                asyncio_join()
-                self.tries += 1
-                wait = min(MAX_WAIT, self.tries * self.tries)
-                logger.critical('Detected unhandled exception, sleeping for %s seconds then resetting task', wait)
-                time.sleep(wait)
-                continue
+        configure_event_loop()
+        loop = asyncio.get_event_loop()
+        try:
+            self.start(loop)
+            # This stops any leftover tasks after out main task finishes
+            asyncio_stop()
+        except asyncio.CancelledError:
+            logger.info('Clean exit requested, exiting')
+            asyncio_join()
+        except Exception:
+            logger.exception('Unhandled exception at top level')
+            asyncio_stop()
+            asyncio_join()
 
     def start(self, loop: asyncio.AbstractEventLoop):
         loop.run_until_complete(self.setup(loop))

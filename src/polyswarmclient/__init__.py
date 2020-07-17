@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import backoff
+import functools
 import json
 import logging
 import math
@@ -16,13 +17,14 @@ from polyswarmclient.bidstrategy import BidStrategyBase
 from polyswarmclient.ethereum.transaction import NonceManager
 from polyswarmclient.exceptions import RateLimitedError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
+from polyswarmclient.backoff_wrapper import BackoffWrapper
 from polyswarmclient.request_rate_limit import RequestRateLimit
 
 logger = logging.getLogger(__name__)
 
 MAX_ARTIFACTS = 256
 RATE_LIMIT_SLEEP = 2.0
-MAX_BACKOFF = 30
+MAX_BACKOFF = 32
 
 
 class Client(object):
@@ -96,7 +98,6 @@ class Client(object):
         self.on_withdraw_stake_due = events.OnWithdrawStakeDueCallback()
         utils.configure_event_loop()
 
-    @backoff.on_exception(backoff.expo, Exception, max_time=MAX_BACKOFF)
     def run(self, chains=None):
         """Run the main event loop
 
@@ -509,8 +510,6 @@ class Client(object):
                 asyncio.get_event_loop().create_task(
                     self.on_withdraw_stake_due.run(amount=task.amount, chain=chain))
 
-    @backoff.on_exception(backoff.expo, (websockets.exceptions.ConnectionClosed, OSError, asyncio.TimeoutError,
-                                         websockets.exceptions.InvalidHandshake), max_time=MAX_BACKOFF)
     async def listen_for_events(self, chain):
         """Listen for events via websocket connection to polyswarmd
         Args:
@@ -524,90 +523,108 @@ class Client(object):
         # http:// -> ws://, https:// -> wss://
         wsuri = f'{self.polyswarmd_uri.replace("http", "ws", 1)}/events/?chain={chain}'
         last_block = 0
-        try:
-            async with websockets.connect(wsuri) as ws:
-                # Fetch parameters again here so we don't miss update events
-                await self.bounties.fetch_parameters(chain)
-                await self.staking.fetch_parameters(chain)
 
-                logger.error('Websocket connection to polyswarmd established')
+        async for message in self.websocket_events(wsuri, chain):
+            next_block = await self.route_websocket_message(message, last_block, chain)
+            if next_block:
+                last_block = next_block
 
-                while not ws.closed:
-                    resp = None
-                    try:
-                        resp = await ws.recv()
-                        resp = json.loads(resp)
-                        event = resp.get('event')
-                        data = resp.get('data')
-                        block_number = resp.get('block_number')
-                        txhash = resp.get('txhash')
-                    except json.JSONDecodeError:
-                        logger.error('Invalid event response from polyswarmd: %s', resp)
-                        continue
+        # If the websocket closes naturally, exit this function
+        logger.info('%s chain closed the websocket', chain)
 
-                    if event != 'block':
-                        logger.info('Received %s on chain %s', event, chain, extra={'extra': data})
-
-                    if event == 'connected':
-                        logger.info('Connected to event socket at: %s', data.get('start_time'))
-                    elif event == 'block':
-                        number = data.get('number', 0)
-
-                        if number <= last_block:
-                            continue
-
-                        if number % 100 == 0:
-                            logger.debug('Block %s on chain %s', number, chain)
-
-                        asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain=chain))
-                        # These are staying here because we need the homechain block events as well
-                        asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain=chain))
-                        asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
-                    elif event == 'fee_update':
-                        d = {'bounty_fee': data.get('bounty_fee'), 'assertion_fee': data.get('assertion_fee')}
-                        await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
-                    elif event == 'window_update':
-                        d = {'assertion_reveal_window': data.get('assertion_reveal_window'),
-                             'arbiter_vote_window': data.get('arbiter_vote_window')}
-                        await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
-                    elif event == 'bounty':
-                        asyncio.get_event_loop().create_task(
-                            self.on_new_bounty.run(**data, block_number=block_number, txhash=txhash, chain=chain))
-                    elif event == 'assertion':
-                        asyncio.get_event_loop().create_task(
-                            self.on_new_assertion.run(**data, block_number=block_number, txhash=txhash,
-                                                      chain=chain))
-                    elif event == 'reveal':
-                        asyncio.get_event_loop().create_task(
-                            self.on_reveal_assertion.run(**data, block_number=block_number, txhash=txhash,
-                                                         chain=chain))
-                    elif event == 'vote':
-                        asyncio.get_event_loop().create_task(
-                            self.on_new_vote.run(**data, block_number=block_number, txhash=txhash, chain=chain))
-                    elif event == 'quorum':
-                        asyncio.get_event_loop().create_task(
-                            self.on_quorum_reached.run(**data, block_number=block_number, txhash=txhash,
-                                                       chain=chain))
-                    elif event == 'settled_bounty':
-                        asyncio.get_event_loop().create_task(
-                            self.on_settled_bounty.run(**data, block_number=block_number, txhash=txhash,
-                                                       chain=chain))
-                    elif event == 'deprecated':
-                        asyncio.get_event_loop().create_task(
-                            self.on_deprecated.run(**data, block_number=block_number, txhash=txhash,
-                                                   chain=chain))
-
-                    elif event == 'initialized_channel':
-                        asyncio.get_event_loop().create_task(
-                            self.on_initialized_channel.run(**data, block_number=block_number, txhash=txhash))
+    async def websocket_events(self, websocket_uri, chain):
+        exponential_backoff = BackoffWrapper(backoff.expo, max_value=MAX_BACKOFF)
+        while True:
+            try:
+                async with websockets.connect(websocket_uri) as websocket:
+                    # reset backoff because we got a connection
+                    exponential_backoff.reset()
+                    logger.error('Websocket connection to polyswarmd established')
+                    # Fetch parameters again here because we may have missed update events
+                    await self.bounties.fetch_parameters(chain)
+                    await self.staking.fetch_parameters(chain)
+                    while not websocket.closed:
+                        message = await websocket.recv()
+                        if message is not None:
+                            logger.debug('Received message on websocket', extra={'extra': message})
+                            yield message
                     else:
-                        logger.error('Invalid event type from polyswarmd: %s', resp)
-        except websockets.exceptions.ConnectionClosed:
-            logger.error('Websocket connection to polyswarmd closed, retrying')
-            raise
-        except (OSError, websockets.exceptions.InvalidHandshake):
-            logger.error('Websocket connection to polyswarmd refused, retrying')
-            raise
-        except asyncio.TimeoutError:
-            logger.error('Websocket connection to polyswarmd timed out, retrying')
-            raise
+                        break
+            except (websockets.exceptions.ConnectionClosed, asyncio.streams.IncompleteReadError):
+                logger.error('Websocket connection to polyswarmd closed, retrying')
+                await exponential_backoff.sleep()
+            except (OSError, websockets.exceptions.InvalidHandshake):
+                logger.error('Websocket connection to polyswarmd refused, retrying')
+                await exponential_backoff.sleep()
+            except asyncio.TimeoutError:
+                logger.error('Websocket connection to polyswarmd timed out, retrying')
+                await exponential_backoff.sleep()
+
+    async def route_websocket_message(self, message, last_block, chain):
+        try:
+            message = json.loads(message)
+            event = message.get('event')
+            data = message.get('data')
+            block_number = message.get('block_number')
+            txhash = message.get('txhash')
+        except json.JSONDecodeError:
+            logger.error('Invalid event message from polyswarmd: %s', message)
+            return
+
+        if event != 'block':
+            logger.info('Received %s on chain %s', event, chain, extra={'extra': data})
+
+        if event == 'connected':
+            logger.info('Connected to event socket at: %s', data.get('start_time'))
+        elif event == 'block':
+            number = data.get('number', 0)
+
+            if number <= last_block:
+                return
+
+            if number % 100 == 0:
+                logger.debug('Block %s on chain %s', number, chain)
+
+            asyncio.get_event_loop().create_task(self.on_new_block.run(number=number, chain=chain))
+            # These are staying here because we need the homechain block events as well
+            asyncio.get_event_loop().create_task(self.__handle_scheduled_events(number, chain=chain))
+            asyncio.get_event_loop().create_task(self.liveness_recorder.advance_time(number))
+            return number
+        elif event == 'fee_update':
+            d = {'bounty_fee': data.get('bounty_fee'), 'assertion_fee': data.get('assertion_fee')}
+            await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
+        elif event == 'window_update':
+            d = {'assertion_reveal_window': data.get('assertion_reveal_window'),
+                 'arbiter_vote_window': data.get('arbiter_vote_window')}
+            await self.bounties.parameters[chain].update({k: v for k, v in d.items() if v is not None})
+        elif event == 'bounty':
+            asyncio.get_event_loop().create_task(
+                self.on_new_bounty.run(**data, block_number=block_number, txhash=txhash, chain=chain))
+        elif event == 'assertion':
+            asyncio.get_event_loop().create_task(
+                self.on_new_assertion.run(**data, block_number=block_number, txhash=txhash,
+                                          chain=chain))
+        elif event == 'reveal':
+            asyncio.get_event_loop().create_task(
+                self.on_reveal_assertion.run(**data, block_number=block_number, txhash=txhash,
+                                             chain=chain))
+        elif event == 'vote':
+            asyncio.get_event_loop().create_task(
+                self.on_new_vote.run(**data, block_number=block_number, txhash=txhash, chain=chain))
+        elif event == 'quorum':
+            asyncio.get_event_loop().create_task(
+                self.on_quorum_reached.run(**data, block_number=block_number, txhash=txhash,
+                                           chain=chain))
+        elif event == 'settled_bounty':
+            asyncio.get_event_loop().create_task(
+                self.on_settled_bounty.run(**data, block_number=block_number, txhash=txhash,
+                                           chain=chain))
+        elif event == 'deprecated':
+            asyncio.get_event_loop().create_task(
+                self.on_deprecated.run(**data, block_number=block_number, txhash=txhash,
+                                       chain=chain))
+        elif event == 'initialized_channel':
+            asyncio.get_event_loop().create_task(
+                self.on_initialized_channel.run(**data, block_number=block_number, txhash=txhash))
+        else:
+            logger.error('Invalid event type from polyswarmd: %s', message)
