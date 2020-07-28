@@ -548,8 +548,6 @@ class Client(object):
                         if message is not None:
                             logger.debug('Received message on websocket', extra={'extra': message})
                             yield message
-                    else:
-                        break
             except (websockets.exceptions.ConnectionClosed, asyncio.streams.IncompleteReadError):
                 logger.error('Websocket connection to polyswarmd closed, retrying')
                 await exponential_backoff.sleep()

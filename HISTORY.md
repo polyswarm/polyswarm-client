@@ -1,5 +1,30 @@
 # Release History
 
+### 2.9.0 (2020-7-24)
+
+* **Feature** - Add `DAILY_RATE_LIMIT` worker option to enforce a daily rate limit across workers via redis.
+* **Feature** - Add `teardown()` to `AbstractScanner` for cleanup operations.
+* **Feature** - Add `__aenter_()` and `__aexit__` to `AbstractScanner` for easy setup and teardown with an async context manager.
+* **Feature** - Add `get_executor()` function for `ScanMode.SYNC` so `AbstractScanner` implementations can override with their preferred `Executor`.
+* **Fix** - Fix silent crash by reading `JobResponse` objects from redis in a single task, instead of one per job.
+* **Fix** - Use a single redis pool for `RedisDailyRateLimit`, `Producer`, etc.
+* **Fix** - Reset backoff duration when websocket reconnects to `polyswarmd`.
+
+#### AbstractScanner Context Manager
+
+AbstractScanner can have the `setup()` and `teardown()` lifecycle methods managed through a context manager.
+This is used in `Worker`, and is very helpful for cleanup in tests.
+
+```python
+
+class Scanner(AbstractScanner):
+    pass
+
+async with Scanner() as scanner:
+    scanner.scan(...)
+
+```
+
 ### 2.8.0 (2020-6-19)
 
 * **Feature** - Change base image to `python:3.7-slim-buster`.

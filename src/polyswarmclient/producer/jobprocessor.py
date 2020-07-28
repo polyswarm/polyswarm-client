@@ -2,6 +2,7 @@ import aioredis
 import asyncio
 import json
 import logging
+import time
 
 from aioredis import Redis
 from asyncio import Future, Task
@@ -29,68 +30,112 @@ class PendingJob:
         self.future = future
         self.results = {}
 
-    def is_expired(self):
+    async def fetch_results(self, redis: Redis, confidence_modifier):
+        """
+        Fetch and store as many results as are in the queue
+
+        :param redis: open redis client
+        :param confidence_modifier: Confidence modifier object
+        """
+        logger.debug('Getting results for %s', self.key)
+        try:
+            # Check expired before doing any redis connections
+            if not self.__is_expired():
+                async for result in self.__redis_results(redis):
+                    response = JobResponse(**json.loads(result.decode('utf-8')))
+                    logger.debug('Found job response', extra={'extra': response.asdict()})
+                    self.__store_job_response(response, confidence_modifier)
+                    if self.is_done():
+                        logger.debug('Job is finished')
+                        break
+
+                logger.debug('Read all available redis results')
+
+        except aioredis.errors.ReplyError:
+            logger.exception('Redis out of memory')
+            raise
+        except aioredis.errors.ConnectionForcedCloseError:
+            logger.exception('Redis connection closed')
+            raise
+        except aioredis.RedisError:
+            logger.exception('Redis experienced unknown error')
+            raise
+        except OSError:
+            logger.exception('Redis connection down')
+            raise
+        except (AttributeError, ValueError, KeyError):
+            logger.exception('Received invalid response from worker')
+            raise
+
+        # finish if expired or has all results
+        if self.is_done():
+            logger.debug('Job is finished, letting it move to polyswarmd')
+            self.__finish()
+
+    async def __redis_results(self, redis: Redis):
+        """
+        Generator of redis results for the key
+        :param redis: open redis client
+        :return a generator of json strings that represent a JobResponse
+        """
+        while True:
+            result = await redis.lpop(self.key)
+            if not result:
+                logger.debug('No more events for %s', self.key)
+                break
+
+            logger.debug('Got %s for %s', result, self.key)
+
+            yield result
+
+    def __store_job_response(self, response: JobResponse, confidence_modifier: Optional[ConfidenceModifier]):
+        """
+        Converts a JobResponse to ScanResult with modified confidence.
+        Stores at the correct index in internal results
+
+        :param response: JobResponse to conver
+        :param confidence_modifier: an optional ConfidenceModifier to potentially change the confidence
+        :return:
+        """
+        confidence = response.confidence
+        if confidence_modifier:
+            confidence = confidence_modifier.modify(self.jobs[response.index].metadata, response.confidence)
+
+        self.results[response.index] = ScanResult(bit=response.bit,
+                                                  verdict=response.verdict,
+                                                  confidence=confidence,
+                                                  metadata=response.metadata)
+
+    def is_done(self):
+        """
+        Checks all things to see if it is done
+        :return: true if expired, or has all results
+        """
+        return self.__is_expired() or self.__has_all_results()
+
+    def __is_expired(self):
         """
         Returns true if any of the jobs are expired
         """
         if self.jobs:
-            return any((job.is_expired() for job in self.jobs))
+            now = time.time()
+            return any((job.is_expired(now) for job in self.jobs))
 
         return False
 
-    def has_all_results(self):
+    def __has_all_results(self):
         """
         Returns true if all the jobs have a result
         """
-        return len(self.jobs) == len(self.results.items())
+        # I'm not sure how results could have more, but if it does, we got all the results we wanted
+        return len(self.jobs) <= len(self.results.items())
 
-    def finish(self):
+    def __finish(self):
         """
         Set the results in the future and mark done
         """
-        scan_results = [self.results.get(i, ScanResult()) for i in range(len(self.results))]
+        scan_results = [self.results.get(i, ScanResult()) for i, _ in enumerate(self.jobs)]
         self.future.set_result(scan_results)
-
-    async def fetch_results(self, redis, confidence_modifier):
-        """
-        Fetch and store as many results as are in the queue
-        Break when there are no more results
-
-        :param redis:
-        :param confidence_modifier:
-        """
-        # No need for a lock here, since it is only called inside the JobProcessor lock
-        logger.debug('Getting results for %s', self.key)
-        while True:
-            try:
-                result = await redis.lpop(self.key)
-                if not result:
-                    logger.debug('No more events for %s', self.key)
-                    return
-
-                response = JobResponse(**json.loads(result.decode('utf-8')))
-                logger.debug('Found job response', extra={'extra': response.asdict()})
-
-                confidence = response.confidence
-                if confidence_modifier:
-                    confidence = confidence_modifier.modify(self.jobs[response.index].metadata, response.confidence)
-
-                self.results[response.index] = ScanResult(bit=response.bit,
-                                                          verdict=response.verdict,
-                                                          confidence=confidence,
-                                                          metadata=response.metadata)
-            except aioredis.errors.ReplyError:
-                logger.exception('Redis out of memory')
-                raise
-            except aioredis.errors.ConnectionForcedCloseError:
-                logger.exception('Redis connection closed')
-                raise
-            except OSError:
-                logger.exception('Redis connection down')
-                raise
-            except (AttributeError, ValueError, KeyError):
-                logger.exception('Received invalid response from worker')
-                break
 
 
 class JobProcessor:
@@ -107,7 +152,7 @@ class JobProcessor:
     task = Optional[Task]
     reset_callback = Optional[Callable[[], Coroutine]]
 
-    def __init__(self, redis: Redis, queue: str, confidence_modifier: Optional[ConfidenceModifier], period: float = .5,
+    def __init__(self, redis: Redis, queue: str, confidence_modifier: Optional[ConfidenceModifier], period: float = .25,
                  redis_error_callback: Optional[Callable[[], Coroutine]] = None):
         self.redis = redis
         self.queue = queue
@@ -155,80 +200,72 @@ class JobProcessor:
         logger.debug('Registering %s jobs under %s', len(jobs), guid)
         pending = PendingJob(key=key, jobs=jobs, future=future)
         async with self.job_lock:
+            if guid in self.pending_jobs:
+                logger.warning('Received duplicate job')
+
             self.pending_jobs[guid] = pending
 
     async def __process(self):
         while True:
-            # Set result for all expired jobs
-            await self.__handle_expired()
-
-            await self.fetch_results()
-
-            # Set result for all jobs that have a full set of results
-            await self.__handle_jobs_with_all_results()
-
-            # Don't consumer all the resources for this loop
-            await asyncio.sleep(self.period)
-
-    async def __handle_expired(self):
-        """
-        Finishes any pending job that has expired
-        """
-        async with self.job_lock:
-            finished_jobs = [(guid, job) for guid, job in self.pending_jobs.items() if job.is_expired()]
-
-        for guid, job in finished_jobs:
-            logger.warning('Timeout handling bounty %s, responding as is.', guid,
-                           extra={'extra': job.results})
-
-        async with self.job_lock:
-            self.__track_and_finish(finished_jobs)
+            # noinspection PyBroadException
+            try:
+                await self.fetch_results()
+                # Don't consumer all the resources for this loop
+                await asyncio.sleep(self.period)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception('Exception processing pending jobs')
 
     async def fetch_results(self):
+        """
+        Iterates across all jobs and triggers them to self update
+        """
         async with self.job_lock:
             jobs = self.pending_jobs.items()
 
+        # This allows interior mutability of the jobs, while not holding the lock.
         results = await asyncio.gather(*[pending_job.fetch_results(self.redis, self.confidence_modifier)
                                          for guid, pending_job in jobs], return_exceptions=True)
 
         reset = False
         for result in results:
-            if isinstance(result, aioredis.errors.RedisError) or isinstance(result, OSError):
+            if isinstance(result, aioredis.RedisError) or isinstance(result, OSError):
                 reset = True
                 logger.exception("Exception fetching results", exc_info=result)
 
         if reset and self.reset_callback:
             await self.reset_callback()
 
-    async def __handle_jobs_with_all_results(self):
-        """
-        Finishes any pending job that has all the results it needs
-        """
-        async with self.job_lock:
-            finished_jobs = [(guid, job) for guid, job in self.pending_jobs.items() if job.has_all_results()]
+        finished_jobs = []
+        for guid, job in jobs:
+            # Finish anything with True result
+            if job.is_done():
+                finished_jobs.append((guid, job))
 
-        for guid, job in finished_jobs:
-            logger.debug("Job %s got all results", guid)
+        if finished_jobs:
+            await self.__track_finished(finished_jobs)
 
-        async with self.job_lock:
-            self.__track_and_finish(finished_jobs)
-
-    def __track_and_finish(self, finished_jobs: List[Tuple[str, PendingJob]]):
+    async def __track_finished(self, finished_jobs: List[Tuple[str, PendingJob]]):
         """
-        Updates the counter of results, tells the pending_job to finish, and removes it from the list of pending jobs
+        Updates the counter of results, and removes the finished jobs from the pending_jobs dict
 
         :param finished_jobs: List of PendingJobs that are finished
         """
+        if not finished_jobs:
+            return
+
         # Update Results counter for scaling
-        loop = asyncio.get_event_loop()
-        loop.create_task(self.__update_job_results_counter(sum([len(pending_job.results) for _, pending_job in finished_jobs])))
+        results_count = sum([len(finished_job.results) for _, finished_job in finished_jobs])
+        asyncio.get_event_loop().create_task(self.__update_job_results_counter(results_count))
 
         # Tell Pending job to send results back, and delete
-        for guid, pending_job in finished_jobs:
-            pending_job.finish()
+        for guid, finished_job in finished_jobs:
             # Delete pending job
             logger.debug('Removing %s', guid)
-            del self.pending_jobs[guid]
+            async with self.job_lock:
+                if guid in self.pending_jobs:
+                    del self.pending_jobs[guid]
 
     async def __update_job_results_counter(self, count):
         """
