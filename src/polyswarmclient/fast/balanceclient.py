@@ -5,11 +5,11 @@ import cachetools
 import logging
 import os
 
-from polyswarmclient.ethereum.balanceclient import MAX_TRIES
 from polyswarmclient.exceptions import LowBalanceError
 
 logger = logging.getLogger(__name__)  # Initialize logger
 
+MAX_TRIES = int(os.environ.get('MAX_TRIES', 3))
 TTL = int(os.environ.get('BALANCE_TTL', 5 * 60))
 MAX_SIZE = 20
 

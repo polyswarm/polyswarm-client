@@ -6,7 +6,7 @@ import backoff
 from polyswarmclient.exceptions import LowBalanceError
 
 logger = logging.getLogger(__name__)  # Initialize logger
-MAX_TRIES = int(os.environ.get('MAX_TRIES', 10))
+MAX_TRIES = int(os.environ.get('MAX_TRIES', 3))
 
 
 class BalanceClient(object):

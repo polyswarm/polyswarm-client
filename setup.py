@@ -21,7 +21,7 @@ def requirements_entries(*entries) -> 'List[str]':
 
 
 setup(name='polyswarm-client',
-      version='2.8.0',
+      version='2.9.0',
       description='Client library to simplify interacting with a polyswarmd instance',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -86,5 +86,5 @@ setup(name='polyswarm-client',
           "Operating System :: OS Independent",
           "Programming Language :: Python :: 3.6",
           "Programming Language :: Python :: 3.7",
-          "Programming Language :: Python :: Implementation :: PyPy",
+          "Programming Language :: Python :: 3.8",
       ])

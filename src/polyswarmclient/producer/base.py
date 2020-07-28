@@ -16,7 +16,7 @@ from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
 logger = logging.getLogger(__name__)
 
 WAIT_TIME = 20
-KEY_TIMEOUT = WAIT_TIME + 10
+KEY_TIMEOUT = 10
 JOB_RESULTS_FORMAT = '{}_{}_{}_results'
 
 
@@ -112,7 +112,7 @@ class Producer:
                 await self.job_processor.register_jobs(guid, key, jobs, future)
 
                 # Age off old result keys
-                loop.create_task(self._expire_key(key, KEY_TIMEOUT))
+                loop.create_task(self._expire_key(key, duration + KEY_TIMEOUT))
 
                 # Wait for results from job processor
                 return await future

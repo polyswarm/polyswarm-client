@@ -1,5 +1,5 @@
-import time
 import dataclasses
+import time
 
 from typing import Optional, Dict, Any
 from polyswarmartifact import ArtifactType
@@ -21,9 +21,9 @@ class JobRequest:
     def key(self):
         return f'{self.guid}:{self.index}'
 
-    def is_expired(self):
-        now = time.time()
-        return (self.ts + self.duration) // 1 < now // 1
+    def is_expired(self, now=None):
+        now = now or time.time()
+        return self.ts + self.duration < now
 
     def get_artifact_type(self) -> ArtifactType:
         return ArtifactType(self.artifact_type)
