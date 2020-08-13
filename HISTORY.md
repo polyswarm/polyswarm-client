@@ -1,5 +1,15 @@
 # Release History
 
+### 2.10.0 (2020-08-12)
+
+* **Feature** - Add `--allow-key-over-http` flag to force api keys over http
+* **Feature** - Change `--insecure-transport` to only change default scheme if not supplied in `--polyswarmd-addr`
+
+#### Deprecation
+
+1. The ``--insecure-transport` flag is deprecated, and users should provide scheme with `--polyswarmd-addr`
+
+
 ### 2.9.0 (2020-7-24)
 
 * **Feature** - Add `DAILY_RATE_LIMIT` worker option to enforce a daily rate limit across workers via redis.

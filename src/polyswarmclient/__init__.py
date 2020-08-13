@@ -39,13 +39,8 @@ class Client(object):
         insecure_transport (bool): Allow insecure transport such as HTTP?
     """
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, tx_error_fatal=False,
-                 insecure_transport=False):
-        if api_key and insecure_transport:
-            raise ValueError('Refusing to send API key over insecure transport')
-
-        protocol = 'http://' if insecure_transport else 'https://'
-        self.polyswarmd_uri = protocol + polyswarmd_addr
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, tx_error_fatal=False):
+        self.polyswarmd_uri = polyswarmd_addr
         logger.debug('self.polyswarmd_uri: %s', self.polyswarmd_uri)
 
         self.api_key = api_key
@@ -129,9 +124,6 @@ class Client(object):
         self.params = {'account': self.account}
         if chains is None:
             chains = {'home', 'side'}
-
-        if self.api_key and not self.polyswarmd_uri.startswith('https://'):
-            raise Exception('Refusing to send API key over insecure transport')
 
         self.__schedules = {chain: events.Schedule() for chain in chains}
         # We can now create our locks, because we are assured that the event loop is set

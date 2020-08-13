@@ -79,3 +79,10 @@ class FatalError(ClickException):
     def __init__(self, message='', exit_code=0):
         super().__init__(message)
         self.exit_code = exit_code
+
+
+class SecurityWarning(Warning):
+    """
+     Warnings about disabled security features.
+     """
+    pass

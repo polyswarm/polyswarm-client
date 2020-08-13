@@ -1,10 +1,11 @@
 import click
 import logging
 import functools
+import sys
 
 from balancemanager import Deposit, Withdraw, Maintainer, DepositStake, WithdrawStake, ViewBalance, ViewStake
 from polyswarmclient.config import init_logging, validate_apikey
-from polyswarmclient import Client
+from polyswarmclient import Client, utils
 from polyswarmclient.exceptions import FatalError
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,8 @@ def validate_transfer_amount(ctx, param, value):
 
 
 def polyswarm_client(func):
-    @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='api.polyswarm.network/v1/default',
-                  help='Address (host:port) of polyswarmd instance')
+    @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='https://api.polyswarm.network/v1/default',
+                  help='Address (scheme://host:port) of polyswarmd instance')
     @click.option('--keyfile', envvar='KEYFILE', type=click.Path(), default=None,
                   help='Keystore file containing the private key to use with this balancemanager')
     @click.option('--password', envvar='PASSWORD', prompt=True, hide_input=True,
@@ -37,7 +38,9 @@ def polyswarm_client(func):
     @click.option('--testing', default=0,
                   help='Activate testing mode for integration testing, trigger N balances to the sidechain then exit')
     @click.option('--insecure-transport', is_flag=True,
-                  help='Connect to polyswarmd via http:// and ws://, mutually exclusive with --api-key')
+                  help='Deprecated. Used only to change the default scheme to http in polyswarmd-addr if not present')
+    @click.option('--allow-key-over-http', is_flag=True, envvar='ALLOW_KEY_OVER_HTTP',
+                  help='Force api keys over http (Not Recommended)')
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -72,13 +75,16 @@ def cli(log, client_log, log_format):
 @click.option('--denomination', type=click.Choice(['nct', 'nct-gwei', 'nct-wei']), default='nct')
 @click.option('--all', is_flag=True)
 @click.argument('amount', type=float, callback=validate_transfer_amount, required=False, default=None)
-def deposit(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination, all, amount):
+def deposit(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http, denomination,
+            all, amount):
     """
     Deposit NCT into a sidechain
     """
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
     if amount is None and not all:
         raise click.BadArgumentUsage('Must specify either an amount or --all')
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     d = Deposit(client, denomination, all, amount, testing=testing)
     d.run_oneshot()
     if d.exit_code:
@@ -90,13 +96,15 @@ def deposit(polyswarmd_addr, keyfile, password, api_key, testing, insecure_trans
 @click.option('--denomination', type=click.Choice(['nct', 'nct-gwei', 'nct-wei']), default='nct')
 @click.option('--all', is_flag=True)
 @click.argument('amount', type=float, callback=validate_transfer_amount, required=False, default=None)
-def withdraw(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination, all, amount):
+def withdraw(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http, denomination, all, amount):
     """
     Withdraw NCT from a sidechain
     """
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
     if amount is None and not all:
         raise click.BadArgumentUsage('Must specify either an amount or --all')
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     w = Withdraw(client, denomination, all, amount, testing=testing)
     w.run_oneshot()
     if w.exit_code:
@@ -109,13 +117,15 @@ def withdraw(polyswarmd_addr, keyfile, password, api_key, testing, insecure_tran
 @click.option('--all', is_flag=True)
 @click.option('--chain', type=click.Choice(['side', 'home']), default='side')
 @click.argument('amount', type=float, callback=validate_transfer_amount, required=False, default=None)
-def deposit_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination, all, chain, amount):
+def deposit_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http, denomination, all, chain, amount):
     """
     Deposit NCT into the ArbiterStaking contract
     """
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
     if amount is None and not all:
         raise click.BadArgumentUsage('Must specify either an amount or --all')
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     d = DepositStake(client, denomination, all, amount, testing=testing, chain=chain)
     d.run_oneshot()
     if d.exit_code:
@@ -128,13 +138,15 @@ def deposit_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure
 @click.option('--all', is_flag=True)
 @click.option('--chain', type=click.Choice(['side', 'home']), default='side')
 @click.argument('amount', type=float, callback=validate_transfer_amount, required=False, default=None)
-def withdraw_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination, all, chain, amount):
+def withdraw_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http, denomination, all, chain, amount):
     """
     Withdraw NCT from the ArbiterStaking contract
     """
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
     if amount is None and not all:
         raise click.BadArgumentUsage('Must specify either an amount or --all')
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     w = WithdrawStake(client, denomination, all, amount, testing=testing, chain=chain)
     w.run_oneshot()
     if w.exit_code:
@@ -152,17 +164,20 @@ def withdraw_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecur
               help='Number of block confirmations relay requires before approving the transfer')
 @click.argument('minimum', type=float, callback=validate_transfer_amount)
 @click.argument('refill-amount', type=float, callback=validate_transfer_amount)
-def maintain(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination,
-             maximum, withdraw_target, confirmations, minimum, refill_amount):
+def maintain(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http,
+             denomination, maximum, withdraw_target, confirmations, minimum, refill_amount):
     """
     Maintain min/max NCT balance in sidechain
     """
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
     logger.info('Maintaining the minimum balance by depositing %s %s when it falls below %s %s',
                 refill_amount,
                 denomination,
                 minimum,
                 denomination)
-    if maximum > 0 and withdraw_target < 0:
+
+    if maximum > 0 > withdraw_target:
         logger.warning('Must set a withdraw target when using a maximum')
         return
 
@@ -181,7 +196,7 @@ def maintain(polyswarmd_addr, keyfile, password, api_key, testing, insecure_tran
                     maximum,
                     denomination)
 
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     Maintainer(client, denomination, confirmations, minimum, refill_amount, maximum, withdraw_target, testing).run()
 
 
@@ -189,8 +204,10 @@ def maintain(polyswarmd_addr, keyfile, password, api_key, testing, insecure_tran
 @polyswarm_client
 @click.option('--denomination', type=click.Choice(['nct', 'nct-gwei', 'nct-wei']), default='nct')
 @click.argument('chain', type=click.Choice(['side', 'home']), required=True)
-def view_balance(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination, chain):
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+def view_balance(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http, denomination, chain):
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     balance = ViewBalance(client, denomination, chain)
     balance.run_oneshot()
     if balance.exit_code:
@@ -201,8 +218,10 @@ def view_balance(polyswarmd_addr, keyfile, password, api_key, testing, insecure_
 @polyswarm_client
 @click.option('--denomination', type=click.Choice(['nct', 'nct-gwei', 'nct-wei']), default='nct')
 @click.argument('chain', type=click.Choice(['side', 'home']), required=True)
-def view_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, denomination, chain):
-    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+def view_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport, allow_key_over_http, denomination, chain):
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
+    client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
     balance = ViewStake(client, denomination, chain)
     balance.run_oneshot()
     if balance.exit_code:
@@ -210,4 +229,4 @@ def view_stake(polyswarmd_addr, keyfile, password, api_key, testing, insecure_tr
 
 
 if __name__ == '__main__':
-    cli(dict())
+    cli(sys.argv[1:])

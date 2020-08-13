@@ -63,8 +63,8 @@ class AbstractAmbassador(ABC):
         self.submission_rate = submission_rate
 
     @classmethod
-    def connect(cls, polyswarmd_addr, keyfile, password, api_key=None, testing=0, insecure_transport=False, chains=None,
-                watchdog=0, submission_rate=0):
+    def connect(cls, polyswarmd_addr, keyfile, password, api_key=None, testing=0, chains=None, watchdog=0,
+                submission_rate=0):
         """Connect the Ambassador to a Client.
 
         Args:
@@ -73,13 +73,12 @@ class AbstractAmbassador(ABC):
             password (str): Password associated with Keyfile.
             api_key (str): Your PolySwarm API key.
             testing (int): Number of testing bounties to use.
-            insecure_transport (bool): Allow insecure transport such as HTTP?
             chains (set(str)):  Set of chains you are acting on.
 
         Returns:
             AbstractAmbassador: Ambassador instantiated with a Client.
         """
-        client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+        client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
         return cls(client, testing, chains, watchdog, submission_rate)
 
     @staticmethod

@@ -39,8 +39,8 @@ class AbstractArbiter(object):
         self.settles_posted = 0
 
     @classmethod
-    def connect(cls, polyswarmd_addr, keyfile, password, api_key=None, testing=0, insecure_transport=False,
-                scanner=None, chains=None, artifact_types=None):
+    def connect(cls, polyswarmd_addr, keyfile, password, api_key=None, testing=0, scanner=None, chains=None,
+                artifact_types=None):
         """Connect the Arbiter to a Client.
 
         Args:
@@ -49,7 +49,6 @@ class AbstractArbiter(object):
             password (str): Password associated with Keyfile.
             api_key (str): Your PolySwarm API key.
             testing (int): Number of testing bounties to use.
-            insecure_transport (bool): Allow insecure transport such as HTTP?
             scanner (AbstractScanner): Scanner for scanning artifacts
             chains (set(str)):  Set of chains you are acting on.
             artifact_types (list(ArtifactType)): List of artifact types you support
@@ -57,7 +56,7 @@ class AbstractArbiter(object):
         Returns:
             AbstractArbiter: Arbiter instantiated with a Client.
         """
-        client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+        client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
         return cls(client, testing, scanner, chains, artifact_types)
 
     async def scan(self, guid, artifact_type, content, metadata, chain):

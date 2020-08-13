@@ -1,9 +1,14 @@
+
 import click
 import importlib.util
 import logging
+import sys
+import warnings
+
+from polyswarmclient import utils
 
 from polyswarmclient.config import init_logging
-from polyswarmclient.exceptions import FatalError
+from polyswarmclient.exceptions import FatalError, SecurityWarning
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +53,8 @@ def choose_backend(backend):
               help='Logging level')
 @click.option('--client-log', default='WARNING',
               help='PolySwarm Client log level')
-@click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='api.polyswarm.network/v1/default',
-              help='Address (host:port) of polyswarmd instance')
+@click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='https://api.polyswarm.network/v1/default',
+              help='Address (scheme://host:port) of polyswarmd instance')
 @click.option('--keyfile', envvar='KEYFILE', type=click.Path(exists=True), default='keyfile',
               help='Keystore file containing the private key to use with this ambassador')
 @click.option('--password', envvar='PASSWORD', prompt=True, hide_input=True,
@@ -61,7 +66,9 @@ def choose_backend(backend):
 @click.option('--testing', default=0,
               help='Activate testing mode for integration testing, respond to N bounties and N offers then exit')
 @click.option('--insecure-transport', is_flag=True,
-              help='Connect to polyswarmd via http:// and ws://, mutually exclusive with --api-key')
+              help='Deprecated. Used only to change the default scheme to http in polyswarmd-addr if not present')
+@click.option('--allow-key-over-http', is_flag=True, envvar='ALLOW_KEY_OVER_HTTP',
+              help='Force api keys over http (Not Recommended)')
 @click.option('--chains', multiple=True, default=['side'],
               help='Chain(s) to operate on')
 @click.option('--watchdog', default=0,
@@ -72,8 +79,8 @@ def choose_backend(backend):
               help='How often to submit a new sample in seconds. Default: No delay between submissions.')
 # @click.option('--offers', envvar='OFFERS', default=False, is_flag=True,
 #               help='Should the abassador send offers')
-def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, testing, insecure_transport, chains, watchdog,
-         log_format, submission_rate):
+def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, testing, insecure_transport,
+         allow_key_over_http, chains, watchdog, log_format, submission_rate):
     """
     Entrypoint for the ambassador driver
     """
@@ -87,12 +94,18 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
 
     init_logging(['ambassador', logger_name], log_format, loglevel)
     init_logging(['polyswarmclient'], log_format, clientlevel)
+
+    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
+
+    if insecure_transport:
+        warnings.warn('--insecure-transport will be removed soon. Please add http:// or https:// to polyswarmd-addr`',
+                      DeprecationWarning)
+
     ambassador_class.connect(polyswarmd_addr, keyfile, password,
                              api_key=api_key, testing=testing,
-                             insecure_transport=insecure_transport,
                              chains=set(chains), watchdog=watchdog,
                              submission_rate=submission_rate).run()
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])

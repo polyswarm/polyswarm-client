@@ -50,9 +50,9 @@ class AbstractMicroengine(object):
         self.settles_posted = 0
 
     @classmethod
-    def connect(cls, polyswarmd_addr, keyfile, password, api_key=None, testing=0, insecure_transport=False,
-                scanner=None, chains=None, artifact_types=None, bid_strategy=None,
-                bounty_filter=BountyFilter(None, None), confidence_modifier=ConfidenceModifier(None, None)):
+    def connect(cls, polyswarmd_addr, keyfile, password, api_key=None, testing=0, scanner=None, chains=None,
+                artifact_types=None, bid_strategy=None, bounty_filter=BountyFilter(None, None),
+                confidence_modifier=ConfidenceModifier(None, None)):
         """Connect the Microengine to a Client.
 
         Args:
@@ -61,7 +61,6 @@ class AbstractMicroengine(object):
             password (str): Password associated with Keyfile.
             api_key (str): Your PolySwarm API key.
             testing (int): Number of testing bounties to use.
-            insecure_transport (bool): Allow insecure transport such as HTTP?
             scanner (Scanner): `Scanner` instance to use.
             chains (set(str)):  Set of chains you are acting on.
             artifact_types (list(ArtifactType)): List of artifact types you support
@@ -72,7 +71,7 @@ class AbstractMicroengine(object):
         Returns:
             AbstractMicroengine: Microengine instantiated with a Client.
         """
-        client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0, insecure_transport)
+        client = Client(polyswarmd_addr, keyfile, password, api_key, testing > 0)
         return cls(client, testing, scanner, chains, artifact_types, bid_strategy=bid_strategy,
                    bounty_filter=bounty_filter, confidence_modifier=confidence_modifier)
 

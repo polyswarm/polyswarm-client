@@ -118,7 +118,7 @@ class MockClient(Client):
             tf.write(TESTKEY)
             tf.flush()
 
-            super().__init__('localhost', tf.name, TESTKEY_PASSWORD, insecure_transport=True)
+            super().__init__('http://localhost', tf.name, TESTKEY_PASSWORD)
 
         self.http_mock = aioresponses()
 

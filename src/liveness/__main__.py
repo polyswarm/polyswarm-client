@@ -34,4 +34,4 @@ def main(log, log_format, loop_update_threshold, average_bounty_wait_threshold):
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])

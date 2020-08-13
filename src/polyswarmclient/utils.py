@@ -6,6 +6,12 @@ import os
 import sys
 import tempfile
 import uuid
+import urllib3.util
+import warnings
+
+from urllib3.util import Url
+
+from polyswarmclient.exceptions import SecurityWarning
 
 from web3 import Web3
 from concurrent.futures import ThreadPoolExecutor
@@ -266,3 +272,30 @@ def return_on_exception(exceptions=(Exception, ), default=None):
 
         return wrapper
     return outer_wrapper
+
+
+def finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport):
+    parsed = fill_scheme(polyswarmd_addr, insecure_transport)
+    # Validate that api keys are sent via https, unless allow_key_over_http is set
+    if api_key and parsed.scheme == 'http':
+        if allow_key_over_http:
+            warnings.warn('Using api-keys over HTTP may expose your API key to third parties', SecurityWarning)
+        else:
+            raise ValueError('Refusing to send API key over http')
+
+    return parsed.url
+
+
+def fill_scheme(polyswarmd_addr, insecure_transport):
+    parsed = urllib3.util.parse_url(polyswarmd_addr)
+
+    # Add scheme if missing
+    if not parsed.scheme == 'http' and not parsed.scheme == 'https':
+        if insecure_transport:
+            addr = f'http://{polyswarmd_addr}'
+            parsed = urllib3.util.parse_url(addr)
+        else:
+            addr = f'https://{polyswarmd_addr}'
+            parsed = urllib3.util.parse_url(addr)
+
+    return parsed
