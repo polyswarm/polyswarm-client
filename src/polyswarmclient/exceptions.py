@@ -10,7 +10,7 @@ class PolyswarmClientException(Exception):
 
 class ApiKeyException(PolyswarmClientException):
     """
-    Used an API key when not communicating over https.
+    Used an API key when not communicating over https, without explicitly allowing
     """
     pass
 

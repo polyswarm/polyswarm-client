@@ -1,5 +1,10 @@
 # Release History
 
+### 2.10.1 (2020-08-14)
+
+* **Fix** - Add `--allow-key-over-http` in `Worker`
+
+
 ### 2.10.0 (2020-08-12)
 
 * **Feature** - Add `--allow-key-over-http` flag to force api keys over http

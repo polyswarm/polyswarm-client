@@ -7,6 +7,7 @@ import math
 import platform
 import signal
 import time
+import urllib3.util
 
 from aiohttp import ClientSession
 from typing import AsyncGenerator
@@ -49,7 +50,7 @@ class OptionalSemaphore(asyncio.Semaphore):
 
 class Worker:
     def __init__(self, redis_addr, queue, task_count=0, download_limit=0, scan_limit=0, api_key=None, testing=0,
-                 scanner=None, scan_time_requirement=0, daily_rate_limit=None):
+                 scanner=None, scan_time_requirement=0, daily_rate_limit=None, allow_key_over_http=False):
         self.redis_uri = 'redis://' + redis_addr
         self.redis = None
         self.queue = queue
@@ -68,6 +69,7 @@ class Worker:
         self.scan_semaphore = None
         self.tries = 0
         self.finished = False
+        self.allow_key_over_http = allow_key_over_http
         # Setup a liveness instance
         self.liveness_recorder = LocalLivenessRecorder()
 
@@ -216,7 +218,7 @@ class Worker:
         return remaining_time
 
     async def download(self, job: JobRequest, session: ClientSession) -> bytes:
-        if self.api_key and not job.polyswarmd_uri.startswith('https://'):
+        if not self.is_key_secure(job):
             raise ApiKeyException()
 
         headers = {'Authorization': self.api_key} if self.api_key is not None else None
@@ -237,3 +239,7 @@ class Worker:
         key = f'{self.queue}_{job.guid}_{job.chain}_results'
         with await self.redis as redis:
             await redis.rpush(key, json.dumps(response.asdict()))
+
+    def is_key_secure(self, job: JobRequest):
+        parsed = urllib3.util.parse_url(job.polyswarmd_uri)
+        return self.allow_key_over_http or not self.api_key or parsed.scheme == 'https'

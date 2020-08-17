@@ -74,7 +74,10 @@ def choose_backend(backend):
               help='Minimum number of seconds this engine requires to scan a file; artifacts with less time remaining will be ignored')
 @click.option('--daily-rate-limit', envvar='DAILY_RATE_LIMIT', default=None,
               help='Number of daily scans allowed')
-def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format, scan_time_requirement, daily_rate_limit):
+@click.option('--allow-key-over-http', is_flag=True, envvar='ALLOW_KEY_OVER_HTTP',
+              help='Force api keys over http (Not Recommended)')
+def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format,
+         scan_time_requirement, daily_rate_limit, allow_key_over_http):
     """Entrypoint for the worker driver
     """
     if tasks != 0:
@@ -95,7 +98,7 @@ def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, sca
 
     logger.info('Running worker with %s tasks', tasks if tasks > 0 else 'unlimited')
     worker = Worker(redis_addr, queue, tasks, download_limit, scan_limit, api_key, testing, scanner,
-                    scan_time_requirement, daily_rate_limit)
+                    scan_time_requirement, daily_rate_limit, allow_key_over_http)
     worker.run()
 
 
