@@ -2,6 +2,7 @@ import aioredis
 import asyncio
 import json
 import logging
+import math
 import time
 
 from aioredis import Redis
@@ -29,6 +30,12 @@ class PendingJob:
         self.jobs = jobs
         self.future = future
         self.results = {}
+
+    def times(self):
+        return [int(math.floor(time.time())) - job.ts for job in self.jobs]
+
+    def time_ratios(self):
+        return [(int(math.floor(time.time())) - job.ts) / job.duration for job in self.jobs]
 
     async def fetch_results(self, redis: Redis, confidence_modifier):
         """
@@ -259,6 +266,11 @@ class JobProcessor:
         results_count = sum([len(finished_job.results) for _, finished_job in finished_jobs])
         asyncio.get_event_loop().create_task(self.__update_job_results_counter(results_count))
 
+        # Update Time for scaling
+        result_times = [result_time for _, job in finished_jobs for result_time in job.times()]
+        result_time_ratio = [result_time for _, job in finished_jobs for result_time in job.time_ratios()]
+        asyncio.get_event_loop().create_task(self.__update_job_result_times(result_times, result_time_ratio))
+
         # Tell Pending job to send results back, and delete
         for guid, finished_job in finished_jobs:
             # Delete pending job
@@ -266,6 +278,18 @@ class JobProcessor:
             async with self.job_lock:
                 if guid in self.pending_jobs:
                     del self.pending_jobs[guid]
+
+    async def __update_job_result_times(self, result_times, result_time_ratio):
+        total_time_key = f'{self.queue}_job_completion_time_accum'
+        total_time_count_key = f'{self.queue}_job_completion_times_count'
+        time_ratio_key = f'{self.queue}_job_completion_time_ratios_accum'
+        time_ratio_count_key = f'{self.queue}_job_completion_time_ratios_count'
+
+        await self.redis.incrby(total_time_key, sum(result_times))
+        await self.redis.incrby(total_time_count_key, len(result_times))
+
+        await self.redis.incrbyfloat(time_ratio_key, sum(result_time_ratio))
+        await self.redis.incrby(time_ratio_count_key, len(result_time_ratio))
 
     async def __update_job_results_counter(self, count):
         """
