@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)  # Initialize logger
 
 
 class Scanner(AbstractScanner):
-
     def __init__(self):
         super(Scanner, self).__init__()
 
@@ -45,15 +44,8 @@ class Scanner(AbstractScanner):
 class Microengine(AbstractMicroengine):
     """
     Scratch microengine is the same as the default behavior.
-
-    Args:
-        client (`Client`): Client to use
-        testing (int): How many test bounties to respond to
-        chains (set[str]): Chain(s) to operate on
     """
-    def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None, **kwargs):
-        """Initialize Scanner"""
-        if artifact_types is None:
-            artifact_types = [ArtifactType.FILE]
+    def __init__(self, client, **kwargs):
+        """Initialize an scratch microengine"""
         scanner = Scanner()
-        super().__init__(client, testing, scanner, chains, artifact_types, **kwargs)
+        super().__init__(client, scanner, **kwargs)

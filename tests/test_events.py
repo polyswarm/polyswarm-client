@@ -1,7 +1,7 @@
 import pytest
 from polyswarmartifact import ArtifactType
 
-from polyswarmclient import events
+from polyswarmclient.server import events
 
 
 @pytest.mark.asyncio

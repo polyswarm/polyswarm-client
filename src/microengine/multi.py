@@ -60,16 +60,7 @@ class Scanner(AbstractScanner):
 class Microengine(AbstractMicroengine):
     """Microengine which aggregates multiple sub-microengines"""
 
-    def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None, **kwargs):
-        """Initialize a multi-backend microengine
-
-        Args:
-            client (polyswarmclient.Client): Client to use
-            testing (int): How many test bounties to respond to
-            chains (set[str]): Chain(s) to operate on
-            artifact_types (list(ArtifactType)): List of artifact types you support
-        """
-        if artifact_types is None:
-            artifact_types = [ArtifactType.FILE]
+    def __init__(self, client, **kwargs):
+        """Initialize a multi-scanner microengine"""
         scanner = Scanner()
-        super().__init__(client, testing, scanner, chains, artifact_types, **kwargs)
+        super().__init__(client, scanner, **kwargs)

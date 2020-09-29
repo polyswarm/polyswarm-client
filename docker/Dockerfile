@@ -2,11 +2,11 @@ FROM python:3.7-slim-buster
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1"
+ENV COMMAND="microengine"
 
 # Exclude documentation packages from being installed
 RUN printf 'path-exclude /usr/share/%s/*\n' doc man groff info lintian linda > /etc/dpkg/dpkg.cfg.d/01_nodoc
 
-ARG DOCKERIZE_VERSION=v0.6.1
 RUN apt-get update -y \
     && apt-get install -qy --no-install-recommends apt-utils \
     && apt-get install -qy --no-install-recommends \
@@ -18,9 +18,7 @@ RUN apt-get update -y \
         gcc libc-dev pkg-config make file \
         git-core \
         wget \
-        g++ \
-    && wget -qO - "https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz" \
-        | tar -xz -C /usr/local/bin
+        g++
 
 WORKDIR /usr/src/app
 
@@ -38,3 +36,5 @@ RUN pip3 install --no-cache-dir -U wheel setuptools \
     && apt-get -q clean \
     && rm -r /var/lib/apt/lists/* \
     && rm -rf /tmp/* /var/tmp/*
+
+CMD bash -c "$COMMAND"

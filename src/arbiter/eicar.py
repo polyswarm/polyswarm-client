@@ -13,20 +13,6 @@ EICAR = base64.b64decode(
 
 class Arbiter(AbstractArbiter):
     """Arbiter which matches hashes to a database of known samples"""
-
-    def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None):
-        """Initialize a verbatim arbiter
-
-        Args:
-            client (polyswwarmclient.Client): Client to use
-            testing (int): How many test bounties to respond to
-            chains (set[str]): Chain(s) to operate on
-            artifact_types (list(ArtifactType)): List of artifact types you support
-        """
-        if artifact_types is None:
-            artifact_types = [ArtifactType.FILE]
-        super().__init__(client, testing, scanner, chains, artifact_types)
-
     async def scan(self, guid, artifact_type, content, metadata, chain):
         """Scan an artifact
 

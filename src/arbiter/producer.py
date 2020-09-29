@@ -17,10 +17,9 @@ TIME_TO_POST_VOTE = 6
 
 
 class Arbiter(AbstractArbiter):
-    def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None):
-        if artifact_types is None:
-            artifact_types = [ArtifactType.FILE]
-        super().__init__(client, testing, scanner, chains, artifact_types)
+    def __init__(self, client, scanner, **kwargs):
+        logger.critical(f'{kwargs}')
+        super().__init__(client, scanner, **kwargs)
 
         if QUEUE is None:
             raise ValueError('No queue configured, set the QUEUE environment variable')
@@ -28,6 +27,7 @@ class Arbiter(AbstractArbiter):
             raise ValueError('Queue name cannot end with `_results`')
 
         self.client.on_run.register(self.__handle_run)
+        self.redis = None
 
     async def __handle_run(self, chain):
         if REDIS_ADDR.startswith('redis://'):
@@ -38,7 +38,7 @@ class Arbiter(AbstractArbiter):
         self.producer = Producer(self.client, redis_uri, QUEUE, TIME_TO_POST_VOTE, rate_limit=RATE_LIMIT)
         await self.producer.start()
 
-    async def fetch_and_scan_all(self, guid, artifact_type, uri, vote_round_end, metadata, chain):
+    async def fetch_and_scan(self, guid, artifact_type, uri, vote_round_end, metadata, chain):
         """Overrides the default fetch logic to embed the URI and index rather than downloading on producer side
 
         Args:

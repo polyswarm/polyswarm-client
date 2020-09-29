@@ -8,7 +8,6 @@ import logging
 import time
 
 from polyswarmartifact import ArtifactType
-from polyswarmclient.filters.filter import MetadataFilter
 from polyswarmclient.producer.job import JobRequest
 from polyswarmclient.producer.jobprocessor import JobProcessor
 from polyswarmclient.ratelimit.redis import RedisDailyRateLimit

@@ -17,10 +17,8 @@ KEY_TIMEOUT = 20
 
 
 class Microengine(AbstractMicroengine):
-    def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None, bid_strategy=None, **kwargs):
-        if artifact_types is None:
-            artifact_types = [ArtifactType.FILE]
-        super().__init__(client, testing, None, chains, artifact_types, bid_strategy=bid_strategy, **kwargs)
+    def __init__(self, client, **kwargs):
+        super().__init__(client, **kwargs)
 
         if QUEUE is None:
             raise ValueError('No queue configured, set the QUEUE environment variable')
@@ -36,12 +34,10 @@ class Microengine(AbstractMicroengine):
         else:
             redis_uri = 'redis://' + REDIS_ADDR
 
-        self.producer = Producer(self.client, redis_uri, QUEUE, TIME_TO_POST_ASSERTION,
-                                 bounty_filter=self.bounty_filter, confidence_modifier=self.confidence_modifier,
-                                 rate_limit=RATE_LIMIT)
+        self.producer = Producer(self.client, redis_uri, QUEUE, TIME_TO_POST_ASSERTION, rate_limit=RATE_LIMIT)
         await self.producer.start()
 
-    async def fetch_and_scan_all(self, guid, artifact_type, uri, duration, metadata, chain):
+    async def fetch_and_scan(self, guid, artifact_type, uri, duration, metadata, chain):
         """Overrides the default fetch logic to embed the URI and index rather than downloading on producer side
 
         Args:

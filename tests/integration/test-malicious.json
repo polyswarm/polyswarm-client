@@ -1,0 +1,1 @@
+{"guid": "a7e8818a-95fc-4487-ad9a-522f6cd88cb2", "artifact_type": "file", "artifact_url": "https://secure.eicar.org/eicar.com", "sha256": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f", "mimetype": "text/plain", "expiration": "", "phase": "assertion", "response_url": "http://integration:5000", "rules": []}

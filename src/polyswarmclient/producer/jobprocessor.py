@@ -10,7 +10,6 @@ from asyncio import Future, Task
 from typing import Dict, List, Optional, Tuple, Coroutine, Callable
 
 from polyswarmclient.abstractscanner import ScanResult
-from polyswarmclient.filters.confidencefilter import ConfidenceModifier
 from polyswarmclient.producer.job import JobRequest, JobResponse
 
 logger = logging.getLogger(__name__)
@@ -95,13 +94,12 @@ class PendingJob:
 
             yield result
 
-    def __store_job_response(self, response: JobResponse, confidence_modifier: Optional[ConfidenceModifier]):
+    def __store_job_response(self, response: JobResponse):
         """
         Converts a JobResponse to ScanResult with modified confidence.
         Stores at the correct index in internal results
 
-        :param response: JobResponse to conver
-        :param confidence_modifier: an optional ConfidenceModifier to potentially change the confidence
+        :param response: JobResponse to convert
         :return:
         """
         confidence = response.confidence
@@ -150,7 +148,6 @@ class JobProcessor:
     Keeps track pending jobs, and polls the PendingJob results every period of time (.5 seconds)
     """
     redis_uri: str
-    confidence_modifier: Optional[ConfidenceModifier]
     queue: str
     period: float
     pending_jobs: Dict[str, PendingJob]
@@ -159,7 +156,7 @@ class JobProcessor:
     task = Optional[Task]
     reset_callback = Optional[Callable[[], Coroutine]]
 
-    def __init__(self, redis: Redis, queue: str, confidence_modifier: Optional[ConfidenceModifier], period: float = .25,
+    def __init__(self, redis: Redis, queue: str, period: float = .25,
                  redis_error_callback: Optional[Callable[[], Coroutine]] = None):
         self.redis = redis
         self.queue = queue

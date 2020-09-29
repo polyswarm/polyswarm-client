@@ -1,5 +1,39 @@
 # Release History
 
+
+### 3.0.0-alpha0
+
+* **Feature** - Runs aiohttp server
+* **Feature** - Compatible with PolySwarm communities start with `something`
+* **Feature** - Replaced websocket event notifications with webhooks
+* **Feature** - Removed all Ethereum primatives to simplify creating microengines/arbiters
+* **Feature** - Support 4 state response from `ScanResult`, `unknown`, `suspicious`, `benign`, `malicious`
+
+
+### Four state `ScanResult` from `bit` and `verdict`
+* `bit=False`, `verdict=False`: 'unknown'
+* `bit=False`, `verdict=True`: 'suspicious'
+* `bit=True`, `verdict=False`: 'benign'
+* `bit=True`, `verdict=True`: 'malicious'
+
+
+#### Breaking Changes
+
+If you use participant template there is no extra work required beyond upgrading, and not calling removed commands.
+Users that developed child classes of either `AbstractArbiter` or `AbstractMicroengine` will need to read below, and match the breaking changes below.
+
+1. Removed callbacks `on_deprecated`, `on_new_assertion`, `on_reveal_assertion`, `on_new_vote`, `on_vote_due`, `on_settle`, `on_new_block`, `on_qorum_reached`
+1. Removed event scheduler, and events `RevealAssertion`, VoteOnBounty`, `SettleBounty`
+1. Removed BidStrategyBase
+1. Removed `bid()` from `AbstractMicroengine`
+1. Removed multi-artifact handling from `AbstractMicroengine` and `AbstractAmbassador`
+1. Replaced `fetch_and_scan_all` in `AbstractMicroengine`, and `AbstractArbiter` with `fetch_and_scan` which scans a single artifact
+1. Removed `AbstractAmbassador`
+1. Removed commands `balancemanager`, `liveness`, `liveliness`, `ambassador`
+1. Removed sub-clients `BountiesClient`, `BalanceClient`, `RelayClient`, `Offersclient`, `StakingClient`
+1. Remove `--filters` including both `accept|reject`, `favor|penalize`, as these features are moving into the webhook distribution service
+1. Changed callback `on_new_bounty` parameters to accept a `Bounty` object. (src/polyswarmclient/server/events.py)
+
 ### 2.10.1 (2020-08-14)
 
 * **Fix** - Add `--allow-key-over-http` in `Worker`

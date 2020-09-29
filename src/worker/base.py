@@ -13,7 +13,6 @@ from aiohttp import ClientSession
 from typing import AsyncGenerator
 
 from polyswarmartifact import DecodeError
-from polyswarmclient.liveness.local import LocalLivenessRecorder
 from polyswarmclient.exceptions import ApiKeyException, FatalError, ScannerSetupFailedError
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
@@ -70,8 +69,6 @@ class Worker:
         self.tries = 0
         self.finished = False
         self.allow_key_over_http = allow_key_over_http
-        # Setup a liveness instance
-        self.liveness_recorder = LocalLivenessRecorder()
 
     def run(self):
         configure_event_loop()
@@ -95,7 +92,6 @@ class Worker:
     async def setup(self, loop: asyncio.AbstractEventLoop):
         self.setup_synchronization(loop)
         self.setup_graceful_shutdown(loop)
-        await self.setup_liveness(loop)
         await self.setup_redis(loop)
 
     def setup_synchronization(self, loop: asyncio.AbstractEventLoop):
@@ -115,15 +111,6 @@ class Worker:
     def handle_signal(self):
         logger.critical('Received exit signal. Gracefully shutting down.')
         self.finished = True
-
-    async def setup_liveness(self, loop: asyncio.AbstractEventLoop):
-        async def advance_liveness_time(liveness):
-            while True:
-                await liveness.advance_time(round(time.time()))
-                await asyncio.sleep(1)
-
-        await self.liveness_recorder.start()
-        loop.create_task(advance_liveness_time(self.liveness_recorder))
 
     async def setup_redis(self, loop: asyncio.AbstractEventLoop):
         self.redis = await aioredis.create_redis_pool(self.redis_uri, loop=loop)
@@ -173,22 +160,21 @@ class Worker:
         remaining_time = 0
         loop = asyncio.get_event_loop()
         try:
-            async with self.liveness_recorder.waiting_task(job.key, round(time.time())):
+            remaining_time = self.get_remaining_time(job)
+
+            # Don't was bandwitdh and resources downloading files if we hit the rate limit
+            if await self.redis_daily_rate_limit.use(peek=True):
+                content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
                 remaining_time = self.get_remaining_time(job)
 
-                # Don't was bandwitdh and resources downloading files if we hit the rate limit
-                if await self.redis_daily_rate_limit.use(peek=True):
-                    content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
-                    remaining_time = self.get_remaining_time(job)
+                # Double check there are still scans remaining, and also increment the account just before scanning
+                if await self.redis_daily_rate_limit.use():
+                    scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
+                    response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
+                                           scan_result.metadata)
+                    loop.create_task(self.respond(job, response))
 
-                    # Double check there are still scans remaining, and also increment the account just before scanning
-                    if await self.redis_daily_rate_limit.use():
-                        scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
-                        response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
-                                               scan_result.metadata)
-                        loop.create_task(self.respond(job, response))
-
-                self.tries = 0
+            self.tries = 0
         except OSError:
             logger.exception('Redis connection down')
         except aioredis.errors.ReplyError:

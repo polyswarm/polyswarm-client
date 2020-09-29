@@ -1,9 +1,7 @@
-import asyncio
-import io
 import os
-
 import pytest
-from polyswarmclient.utils import AsyncArtifactTempfile, finalize_polyswarmd_addr
+
+from polyswarmclient.utils import AsyncArtifactTempfile
 
 
 def is_gone(path):
@@ -123,82 +121,3 @@ async def test_async_artifact_tempfile_nonexistent_filename(blob, tmp_path):
         await f.seek(0)
         assert await f.read() == blob
     assert is_gone(filename)
-
-
-def test_add_default_https():
-    url = 'polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = False
-    api_key = None
-
-    assert 'https://polyswarmd-fast-e2e:31337/v1' == finalize_polyswarmd_addr(url, api_key, allow_key_over_http,
-                                                                              insecure_transport)
-
-
-def test_no_change_https_no_key():
-    url = 'https://polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = False
-    api_key = None
-
-    assert 'https://polyswarmd-fast-e2e:31337/v1' == finalize_polyswarmd_addr(url, api_key, allow_key_over_http,
-                                                                              insecure_transport)
-
-
-def test_no_changes_https_with_key():
-    url = 'https://polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = False
-    api_key = 'api-key'
-
-    assert 'https://polyswarmd-fast-e2e:31337/v1' == finalize_polyswarmd_addr(url, api_key, allow_key_over_http,
-                                                                              insecure_transport)
-
-
-def test_add_http_insecure_transport():
-    url = 'polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = True
-    api_key = None
-
-    assert 'http://polyswarmd-fast-e2e:31337/v1' == finalize_polyswarmd_addr(url, api_key, allow_key_over_http,
-                                                                             insecure_transport)
-
-
-def test_raises_add_scheme_with_key():
-    url = 'polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = True
-    api_key = 'api-key'
-
-    with pytest.raises(ValueError):
-        finalize_polyswarmd_addr(url, api_key, allow_key_over_http, insecure_transport)
-
-
-def test_add_http_with_key_allowed():
-    url = 'polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = True
-    insecure_transport = True
-    api_key = 'api-key'
-
-    assert 'http://polyswarmd-fast-e2e:31337/v1' == finalize_polyswarmd_addr(url, api_key, allow_key_over_http,
-                                                                             insecure_transport)
-
-
-def test_no_changes_http_no_key():
-    url = 'http://polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = False
-    api_key = None
-
-    finalize_polyswarmd_addr(url, api_key, allow_key_over_http, insecure_transport)
-
-
-def test_raises_http_with_key():
-    url = 'http://polyswarmd-fast-e2e:31337/v1'
-    allow_key_over_http = False
-    insecure_transport = False
-    api_key = 'api-key'
-
-    with pytest.raises(ValueError):
-        finalize_polyswarmd_addr(url, api_key, allow_key_over_http, insecure_transport)

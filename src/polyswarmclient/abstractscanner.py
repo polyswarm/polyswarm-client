@@ -3,13 +3,22 @@ import enum
 import logging
 import platform
 import warnings
+
 from concurrent.futures import Executor
 from typing import Optional
 
 from polyswarmartifact.schema.verdict import Verdict
 from polyswarmclient.exceptions import ScannerSetupFailedError
+from polyswarmclient.utils import bool_list_to_int
 
 logger = logging.getLogger(__name__)  # Initialize logger
+
+
+class VerdictState(enum.Enum):
+    UNKNOWN = 0
+    SUSPICIOUS = 1
+    BENIGN = 2
+    MALICIOUS = 3
 
 
 class ScanResult(object):
@@ -28,6 +37,12 @@ class ScanResult(object):
         self.verdict = verdict
         self.confidence = confidence
         self.metadata = metadata
+
+    @property
+    def verdict_string(self):
+        # We have 4 states determined by 2 bool values, which can be converted to a 2 bit integer
+        # As a 2 bit integer, we can read from an Enum which matches the int to the verdict response
+        return VerdictState(bool_list_to_int([self.bit, self.verdict])).name.lower()
 
     def __repr__(self):
         return '<ScanResult bit={}, verdict={}, confidence={}, metadata={}>'.format(self.bit, self.verdict,

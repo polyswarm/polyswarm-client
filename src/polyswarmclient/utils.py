@@ -13,7 +13,6 @@ from urllib3.util import Url
 
 from polyswarmclient.exceptions import SecurityWarning
 
-from web3 import Web3
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -30,10 +29,6 @@ def to_bytes(value):
         return bytes(value, 'utf-8')
     if isinstance(value, int):
         return bytes(str(value), 'utf-8')
-
-
-def sha3(seed):
-    return Web3.keccak(to_bytes(seed))
 
 
 def int_to_bytes(i):
@@ -67,16 +62,6 @@ def guid_as_string(guid):
     return str(uuid.UUID(int=int(guid), version=4))
 
 
-def calculate_commitment(account, verdicts, nonce=None):
-    if nonce is None:
-        nonce = os.urandom(32)
-    if isinstance(nonce, int):
-        nonce = int_to_bytes(nonce)
-    account = int(account, 16)
-    commitment = sha3(int_to_bytes(verdicts ^ int_from_bytes(sha3(nonce)) ^ account))
-    return int_from_bytes(nonce), int_from_bytes(commitment)
-
-
 def configure_event_loop():
     # Default event loop does not support pipes on Windows
     if sys.platform == 'win32':
@@ -104,21 +89,6 @@ def asyncio_stop():
 
     for task in pending:
         task.cancel()
-
-
-def check_response(response):
-    """Check the status of responses from polyswarmd
-
-    Args:
-        response: Response dict parsed from JSON from polyswarmd
-    Returns:
-        (bool): True if successful else False
-    """
-    status = response.get('status')
-    ret = status and status == 'OK'
-    if not ret:
-        logger.info('Received unexpected failure response from polyswarmd', extra={'extra': response})
-    return ret
 
 
 def is_valid_uri(uri):
@@ -272,30 +242,3 @@ def return_on_exception(exceptions=(Exception, ), default=None):
 
         return wrapper
     return outer_wrapper
-
-
-def finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport):
-    parsed = fill_scheme(polyswarmd_addr, insecure_transport)
-    # Validate that api keys are sent via https, unless allow_key_over_http is set
-    if api_key and parsed.scheme == 'http':
-        if allow_key_over_http:
-            warnings.warn('Using api-keys over HTTP may expose your API key to third parties', SecurityWarning)
-        else:
-            raise ValueError('Refusing to send API key over http')
-
-    return parsed.url
-
-
-def fill_scheme(polyswarmd_addr, insecure_transport):
-    parsed = urllib3.util.parse_url(polyswarmd_addr)
-
-    # Add scheme if missing
-    if not parsed.scheme == 'http' and not parsed.scheme == 'https':
-        if insecure_transport:
-            addr = f'http://{polyswarmd_addr}'
-            parsed = urllib3.util.parse_url(addr)
-        else:
-            addr = f'https://{polyswarmd_addr}'
-            parsed = urllib3.util.parse_url(addr)
-
-    return parsed

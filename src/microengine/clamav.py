@@ -57,9 +57,7 @@ class Microengine(AbstractMicroengine):
         chains (set[str]): Chain(s) to operate on
     """
 
-    def __init__(self, client, testing=0, scanner=None, chains=None, artifact_types=None, **kwargs):
+    def __init__(self, client, **kwargs):
         """Initialize a ClamAV microengine"""
-        if artifact_types is None:
-            artifact_types = [ArtifactType.FILE]
         scanner = Scanner()
-        super().__init__(client, testing, scanner, chains, artifact_types, **kwargs)
+        super().__init__(client, scanner, **kwargs)

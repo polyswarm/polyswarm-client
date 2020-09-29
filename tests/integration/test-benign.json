@@ -1,0 +1,1 @@
+{"guid": "a7f8818a-95fc-4487-ad9a-522f6cd88cb2", "artifact_type": "file", "artifact_url": "https://example.com", "sha256": "asdf", "mimetype": "text/plain", "expiration": "", "phase": "assertion", "response_url": "http://integration:5000", "rules": []}

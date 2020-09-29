@@ -9,7 +9,6 @@ import json
 import os
 import psutil
 import random
-from web3 import Web3
 from aioresponses import aioresponses
 from asynctest.mock import patch
 
@@ -45,9 +44,6 @@ def event(event, data, block_number=0, txhash='0x0'):
     return json.dumps({'event': event, 'data': data, 'block_number': block_number, 'txhash': txhash})
 
 
-def random_address():
-    return Web3().toChecksumAddress(os.urandom(20).hex())
-
 
 def random_bitset():
     x = random.getrandbits(256)
@@ -56,57 +52,6 @@ def random_bitset():
 
 def random_ipfs_uri():
     return base58.b58encode(b'\x12' + os.urandom(32)).decode('utf-8')
-
-
-class WebsocketMockManager(object):
-    def __init__(self):
-        self.connect_patch = patch('websockets.connect', new_callable=lambda: self)
-        self.open_sockets = {}
-
-    # TODO: Support other args
-    def __call__(self, uri):
-        if uri in self.open_sockets:
-            return self.open_sockets.get(uri)
-
-        ret = WebsocketMock()
-        self.open_sockets[uri] = ret
-        return ret
-
-    def start(self):
-        self.connect_patch.start()
-
-    def stop(self):
-        self.connect_patch.stop()
-
-        for _, s in self.open_sockets.items():
-            s.close()
-
-    def __enter__(self):
-        self.start()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-
-
-class WebsocketMock(object):
-    def __init__(self):
-        self.closed = False
-        self.queue = asyncio.Queue()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def close(self):
-        self.closed = True
-
-    async def recv(self):
-        return await self.queue.get()
-
-    async def send(self, data):
-        await self.queue.put(data)
 
 
 class MockClient(Client):
@@ -122,6 +67,7 @@ class MockClient(Client):
 
         self.http_mock = aioresponses()
 
+        # replace with server
         self.__ws_mock_manager = WebsocketMockManager()
 
         self.home_ws_mock = None

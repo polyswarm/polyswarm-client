@@ -2,12 +2,9 @@ import click
 import importlib.util
 import logging
 import sys
-import warnings
 
-from polyswarmartifact import ArtifactType
-from polyswarmclient import utils
 from polyswarmclient.config import init_logging
-from polyswarmclient.exceptions import FatalError, SecurityWarning
+from polyswarmclient.exceptions import FatalError
 
 logger = logging.getLogger(__name__)  # Initialize logger
 
@@ -52,19 +49,17 @@ def choose_backend(backend):
 @click.option('--client-log', default='WARNING',
               help='PolySwarm Client log level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='https://api.polyswarm.network/v1/default',
-              help='Address (scheme://host:port) of polyswarmd instance')
-@click.option('--keyfile', envvar='KEYFILE', type=click.Path(exists=True), default='keyfile',
-              help='Keystore file containing the private key to use with this arbiter')
-@click.option('--password', envvar='PASSWORD', prompt=True, hide_input=True,
-              help='Password to decrypt the keyfile with')
+              help='Deprecated')
+@click.option('--keyfile', envvar='KEYFILE', type=click.Path(),
+              help='Deprecated')
+@click.option('--password', envvar='PASSWORD',
+              help='Deprecated')
 @click.option('--api-key', envvar='API_KEY', default='',
               help='API key to use with polyswarmd')
 @click.option('--backend', envvar='BACKEND', required=True,
               help='Backend to use')
 @click.option('--testing', default=0,
               help='Activate testing mode for integration testing, respond to N bounties then exit')
-@click.option('--insecure-transport', is_flag=True,
-              help='Deprecated. Used only to change the default scheme to http in polyswarmd-addr if not present')
 @click.option('--allow-key-over-http', is_flag=True, envvar='ALLOW_KEY_OVER_HTTP',
               help='Force api keys over http (Not Recommended)')
 @click.option('--chains', multiple=True, default=['side'],
@@ -72,9 +67,13 @@ def choose_backend(backend):
 @click.option('--log-format', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--artifact-type', multiple=True, default=['file'],
-              help='List of artifact types to scan')
-def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, testing, insecure_transport,
-         allow_key_over_http, chains, log_format, artifact_type):
+              help='Deprecated')
+@click.option('--host', envvar='HOST', default='0.0.0.0',
+              help='Host address to run the server')
+@click.option('--port', envvar='PORT', default='8080',
+              help='Port to listen for webhooks')
+def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, testing, allow_key_over_http, chains,
+         log_format, artifact_type, host, port):
     """
     Entrypoint for the arbiter driver
     """
@@ -89,19 +88,7 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
     init_logging(['arbiter', logger_name], log_format, loglevel)
     init_logging(['polyswarmclient'], log_format, clientlevel)
 
-    polyswarmd_addr = utils.finalize_polyswarmd_addr(polyswarmd_addr, api_key, allow_key_over_http, insecure_transport)
-    if insecure_transport:
-        warnings.warn('--insecure-transport will be removed soon. Please add http:// or https:// to polyswarmd-addr`',
-                      DeprecationWarning)
-
-    artifact_types = None
-    if artifact_type:
-        artifact_types = [ArtifactType.from_string(artifact) for artifact in artifact_type]
-
-    arbiter_class.connect(polyswarmd_addr, keyfile, password,
-                          api_key=api_key, testing=testing,
-                          chains=set(chains),
-                          artifact_types=artifact_types).run()
+    arbiter_class.connect(host=host, port=port, api_key=api_key).run()
 
 
 if __name__ == '__main__':
