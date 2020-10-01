@@ -42,7 +42,7 @@ class ScanResult(object):
     def verdict_string(self):
         # We have 4 states determined by 2 bool values, which can be converted to a 2 bit integer
         # As a 2 bit integer, we can read from an Enum which matches the int to the verdict response
-        return VerdictState(bool_list_to_int([self.bit, self.verdict])).name.lower()
+        return VerdictState(bool_list_to_int([self.verdict, self.bit])).name.lower()
 
     def __repr__(self):
         return '<ScanResult bit={}, verdict={}, confidence={}, metadata={}>'.format(self.bit, self.verdict,

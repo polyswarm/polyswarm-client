@@ -37,7 +37,7 @@ class AbstractParticipant(object):
             AbstractMicroengine: Microengine instantiated with a Client.
         """
         client = Client(api_key, host, port)
-        return cls(client, scanner)
+        return cls(client, scanner=scanner)
 
     def run(self):
         """
@@ -76,7 +76,7 @@ class AbstractParticipant(object):
         logger.info('Responding to %s bounty %s', bounty.artifact_type, bounty.guid)
 
         request = ScanResultRequest(verdict=result.verdict_string, confidence=result.confidence, metadata=json.loads(result.metadata))
-        await self.client.make_request(bounty.response_url, json=request.to_json())
+        await self.client.make_request(method='POST', url=bounty.response_url, json=request.to_json())
 
     async def fetch_and_scan(self, bounty: Bounty) -> ScanResult:
         """Fetch and scan all artifacts concurrently

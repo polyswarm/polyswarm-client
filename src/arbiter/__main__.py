@@ -45,8 +45,8 @@ def choose_backend(backend):
 
 
 @click.command()
-@click.option('--log', default='WARNING', help='Logging level')
-@click.option('--client-log', default='WARNING',
+@click.option('--log', envvar='LOG_LEVEL', default='WARNING', help='Logging level')
+@click.option('--client-log', envvar='CLIENT_LOG_LEVEL', default='WARNING',
               help='PolySwarm Client log level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='https://api.polyswarm.network/v1/default',
               help='Deprecated')
@@ -64,7 +64,7 @@ def choose_backend(backend):
               help='Force api keys over http (Not Recommended)')
 @click.option('--chains', multiple=True, default=['side'],
               help='Chain(s) to operate on')
-@click.option('--log-format', default='text',
+@click.option('--log-format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--artifact-type', multiple=True, default=['file'],
               help='Deprecated')

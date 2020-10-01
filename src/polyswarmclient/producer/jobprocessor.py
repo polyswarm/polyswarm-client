@@ -20,28 +20,27 @@ class PendingJob:
     A wrapper around a list of Jobs that are processing in the backend
     """
     key: str
-    jobs: List[JobRequest]
-    results: Dict[int, ScanResult]
+    job: JobRequest
+    result: Optional[ScanResult]
     future: Future
 
-    def __init__(self, key: str, jobs: List[JobRequest], future: Future):
+    def __init__(self, key: str, job: JobRequest, future: Future):
         self.key = key
-        self.jobs = jobs
+        self.job = job
         self.future = future
-        self.results = {}
+        self.result = None
 
-    def times(self):
-        return [int(math.floor(time.time())) - job.ts for job in self.jobs]
+    def time(self):
+        return int(math.floor(time.time())) - self.job.ts
 
-    def time_ratios(self):
-        return [(int(math.floor(time.time())) - job.ts) / job.duration for job in self.jobs]
+    def time_ratio(self):
+        return (int(math.floor(time.time())) - self.job.ts) / self.job.duration
 
-    async def fetch_results(self, redis: Redis, confidence_modifier):
+    async def fetch_results(self, redis: Redis):
         """
         Fetch and store as many results as are in the queue
 
         :param redis: open redis client
-        :param confidence_modifier: Confidence modifier object
         """
         logger.debug('Getting results for %s', self.key)
         try:
@@ -50,7 +49,7 @@ class PendingJob:
                 async for result in self.__redis_results(redis):
                     response = JobResponse(**json.loads(result.decode('utf-8')))
                     logger.debug('Found job response', extra={'extra': response.asdict()})
-                    self.__store_job_response(response, confidence_modifier)
+                    self.__store_job_response(response)
                     if self.is_done():
                         logger.debug('Job is finished')
                         break
@@ -102,14 +101,10 @@ class PendingJob:
         :param response: JobResponse to convert
         :return:
         """
-        confidence = response.confidence
-        if confidence_modifier:
-            confidence = confidence_modifier.modify(self.jobs[response.index].metadata, response.confidence)
-
-        self.results[response.index] = ScanResult(bit=response.bit,
-                                                  verdict=response.verdict,
-                                                  confidence=confidence,
-                                                  metadata=response.metadata)
+        self.result = ScanResult(bit=response.bit,
+                                 verdict=response.verdict,
+                                 confidence=response.confidence,
+                                 metadata=response.metadata)
 
     def is_done(self):
         """
@@ -122,9 +117,9 @@ class PendingJob:
         """
         Returns true if any of the jobs are expired
         """
-        if self.jobs:
+        if self.job:
             now = time.time()
-            return any((job.is_expired(now) for job in self.jobs))
+            return self.job.is_expired(now)
 
         return False
 
@@ -133,14 +128,14 @@ class PendingJob:
         Returns true if all the jobs have a result
         """
         # I'm not sure how results could have more, but if it does, we got all the results we wanted
-        return len(self.jobs) <= len(self.results.items())
+        return self.result is not None
 
     def __finish(self):
         """
         Set the results in the future and mark done
         """
-        scan_results = [self.results.get(i, ScanResult()) for i, _ in enumerate(self.jobs)]
-        self.future.set_result(scan_results)
+
+        self.future.set_result(self.result)
 
 
 class JobProcessor:
@@ -160,7 +155,6 @@ class JobProcessor:
                  redis_error_callback: Optional[Callable[[], Coroutine]] = None):
         self.redis = redis
         self.queue = queue
-        self.confidence_modifier = confidence_modifier
         self.period = period
         self.reset_callback = redis_error_callback
         self.pending_jobs = {}
@@ -192,17 +186,17 @@ class JobProcessor:
         async with self.job_lock:
             self.redis = redis
 
-    async def register_jobs(self, guid: str, key: str, jobs: List[JobRequest], future: Future):
+    async def register_job(self, guid: str, key: str, job: JobRequest, future: Future):
         """
         Register a new pending job to be monitored, and polled
 
         :param guid: bounty guid
         :param key: redis key to poll
-        :param jobs: list of jobs in progress
+        :param job: job in progress
         :param future: future to return results
         """
-        logger.debug('Registering %s jobs under %s', len(jobs), guid)
-        pending = PendingJob(key=key, jobs=jobs, future=future)
+        logger.debug('Registering jobs under %s', guid)
+        pending = PendingJob(key=key, job=job, future=future)
         async with self.job_lock:
             if guid in self.pending_jobs:
                 logger.warning('Received duplicate job')
@@ -229,7 +223,7 @@ class JobProcessor:
             jobs = self.pending_jobs.items()
 
         # This allows interior mutability of the jobs, while not holding the lock.
-        results = await asyncio.gather(*[pending_job.fetch_results(self.redis, self.confidence_modifier)
+        results = await asyncio.gather(*[pending_job.fetch_results(self.redis)
                                          for guid, pending_job in jobs], return_exceptions=True)
 
         reset = False
@@ -260,12 +254,12 @@ class JobProcessor:
             return
 
         # Update Results counter for scaling
-        results_count = sum([len(finished_job.results) for _, finished_job in finished_jobs])
+        results_count = len([finished_job for _, finished_job in finished_jobs if finished_job.result is not None])
         asyncio.get_event_loop().create_task(self.__update_job_results_counter(results_count))
 
         # Update Time for scaling
-        result_times = [result_time for _, job in finished_jobs for result_time in job.times()]
-        result_time_ratio = [result_time for _, job in finished_jobs for result_time in job.time_ratios()]
+        result_times = [job.time() for _, job in finished_jobs]
+        result_time_ratio = [job.time_ratio() for _, job in finished_jobs]
         asyncio.get_event_loop().create_task(self.__update_job_result_times(result_times, result_time_ratio))
 
         # Tell Pending job to send results back, and delete

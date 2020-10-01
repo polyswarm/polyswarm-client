@@ -1,9 +1,7 @@
 import aiohttp
 import asyncio
-import json
 import logging
 
-from aiohttp import web
 from typing import Optional
 
 from polyswarmclient import utils, events
@@ -14,7 +12,6 @@ from polyswarmclient.server import Server
 from polyswarmclient.server.events import Bounty
 
 logger = logging.getLogger(__name__)
-routes = web.RouteTableDef()
 
 MAX_ARTIFACTS = 1
 RATE_LIMIT_SLEEP = 2.0
@@ -72,12 +69,17 @@ class Client(object):
         loop = asyncio.get_event_loop()
         self.rate_limit = await RequestRateLimit.build()
         loop.create_task(self.on_run.run(chain=''))
-        server = Server(routes, self.api_key, self.host, self.port)
+
+        def callback(bounty: Bounty):
+            loop.create_task(self.on_new_bounty.run(bounty))
+
+        s = Server(self.api_key, self.host, self.port, bounty_callback=callback)
         try:
-            await server.run()
+            logger.info('Starting server')
+            await s.run()
         finally:
             loop.create_task(self.on_stop.run())
-            await server.stop()
+            await s.stop()
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ClientOSError,
                                 aiohttp.ContentTypeError, RateLimitedError), default=(False, {}))
@@ -95,7 +97,6 @@ class Client(object):
         logger.debug('making request to url: %s', url)
 
         params = params or {}
-        params.update(dict(self.params))
 
         # Allow overriding API key per request
         headers = {'Authorization': self.api_key} if self.api_key else {}
@@ -132,28 +133,6 @@ class Client(object):
             logger.warning('Hit rate limits, stopping all requests for a moment')
             asyncio.get_event_loop().create_task(self.rate_limit.trigger())
             raise
-
-    @routes.post('/')
-    async def request_handler(self, request):
-        loop = asyncio.get_event_loop()
-        headers = {'Content-Type': 'application/json'}
-        event_name = request.headers.get('X-POLYSWARM-EVENT')
-        if event_name == 'bounty':
-            try:
-                bounty = Bounty(**await request.json())
-                loop.create_task(self.on_new_bounty.run(bounty))
-            except (TypeError, KeyError, ValueError):
-                logger.exception("Invalid bounty request")
-                message = {'bounty': 'Invalid bounty body'}
-                return web.Response(body=json.dumps(message), headers=headers, status=400)
-        if event_name == 'ping':
-            pass
-        else:
-            message = {'X-POLYSWARM-EVENT': 'Unsupported event name'}
-            return web.Response(body=json.dumps(message), headers=headers, status=400)
-
-        message = 'OK'
-        return web.Response(body=json.dumps(message), headers=headers, status=400)
 
     @staticmethod
     def _check_status_for_rate_limit(status):

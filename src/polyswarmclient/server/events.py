@@ -6,10 +6,9 @@ import time
 from typing import List, Dict
 
 
-@dataclasses.dataclass()
+@dataclasses.dataclass
 class Bounty:
     guid: str
-    reward: str
     artifact_type: str
     artifact_url: str
     sha256: str
@@ -18,13 +17,13 @@ class Bounty:
     phase: str
     response_url: str
     rules: List[str]
-    duration: dataclasses.field(init=False)
+    duration: int = dataclasses.field(init=False)
 
     def __post_init__(self):
-        self.duration = int(math.floor(datetime.datetime.fromisoformat(self.expiration).timestamp())) - time.time()
+        self.duration = int(math.floor(datetime.datetime.fromisoformat(self.expiration).timestamp())) - int(math.floor(time.time()))
 
 
-@dataclasses.dataclass()
+@dataclasses.dataclass
 class ScanResultRequest:
     verdict: str
     confidence: float

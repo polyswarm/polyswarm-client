@@ -28,7 +28,7 @@ async def job_processor(event_loop, redis_client) -> JobProcessor:
 async def test_result_values_in_redis(redis_client, job_processor):
     job = JobRequest('polyswarmd-addr', 'guid', 0, 'uri', ArtifactType.FILE.value, 10, None, 'side', int(time.time()))
     future = Future()
-    await job_processor.register_jobs('guid', 'test_result_values_in_redis', [job], future)
+    await job_processor.register_job('guid', 'test_result_values_in_redis', [job], future)
 
     # Add response before waiting on the future
     job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
@@ -49,7 +49,7 @@ async def test_result_values_in_redis(redis_client, job_processor):
 async def test_results_after_complete(redis_client, job_processor):
     job = JobRequest('polyswarmd-addr', 'guid', 0, 'uri', ArtifactType.FILE.value, 10, None, 'side', int(time.time()))
     future = Future()
-    await job_processor.register_jobs('guid', 'test_results_after_complete', [job], future)
+    await job_processor.register_job('guid', 'test_results_after_complete', [job], future)
 
     # Add response before waiting on the future
     job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
@@ -75,7 +75,7 @@ async def test_results_multiple_results(redis_client, job_processor):
     future = Future()
     jobs = [JobRequest('polyswarmd-addr', 'guid', i, 'uri', ArtifactType.FILE.value, 1, None, 'side', int(time.time()))
             for i in range(2)]
-    await job_processor.register_jobs('guid', 'test_results_multiple_results', jobs, future)
+    await job_processor.register_job('guid', 'test_results_multiple_results', jobs, future)
 
     scan_results = await future
 
@@ -95,7 +95,7 @@ async def test_results_after_timeout(redis_client, job_processor):
             for i in range(1)]
 
     future = Future()
-    await job_processor.register_jobs('guid', 'test_results_after_timeout', jobs, future)
+    await job_processor.register_job('guid', 'test_results_after_timeout', jobs, future)
 
     scan_results = await future
 
@@ -115,7 +115,7 @@ async def test_redis_error_recovery(job_processor):
     job_processor.stop()
     job_processor.redis.close()
     await job_processor.redis.wait_closed()
-    await job_processor.register_jobs('guid', 'test_redis_error_recovery', [job], future)
+    await job_processor.register_job('guid', 'test_redis_error_recovery', [job], future)
     await job_processor.fetch_results()
 
     reset_redis.assert_called()
@@ -136,7 +136,7 @@ async def test_results_thousands_pending_jobs(redis_client, job_processor):
         futures.append(future)
         return future
 
-    await asyncio.gather(*[job_processor.register_jobs(f'guid:{i}', f'test_results_thousands_pending_jobs:{i}', [create_job(i)], create_future()) for i in range(count)])
+    await asyncio.gather(*[job_processor.register_job(f'guid:{i}', f'test_results_thousands_pending_jobs:{i}', [create_job(i)], create_future()) for i in range(count)])
 
     job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
     await asyncio.gather(*[redis_client.rpush(f'test_results_thousands_pending_jobs:{i}', json.dumps(job_response.asdict())) for i in range(count)])
