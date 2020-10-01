@@ -18,7 +18,7 @@ class Arbiter(AbstractArbiter):
         chains (set[str]): Chain(s) to operate on
     """
 
-    def __init__(self, client, **kwargs):
+    def __init__(self, client, scanner=None, **kwargs):
         """Initialize a ClamAV arbiter"""
         scanner = ClamAvScanner()
         super().__init__(client, scanner, **kwargs)

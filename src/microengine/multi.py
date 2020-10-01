@@ -60,7 +60,7 @@ class Scanner(AbstractScanner):
 class Microengine(AbstractMicroengine):
     """Microengine which aggregates multiple sub-microengines"""
 
-    def __init__(self, client, **kwargs):
+    def __init__(self, client, scanner=None, **kwargs):
         """Initialize a multi-scanner microengine"""
         scanner = Scanner()
         super().__init__(client, scanner, **kwargs)

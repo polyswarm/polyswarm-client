@@ -47,7 +47,7 @@ class Scanner(AbstractScanner):
 class Microengine(AbstractMicroengine):
     """Microengine which matches samples against yara rules"""
 
-    def __init__(self, client, **kwargs):
+    def __init__(self, client, scanner=None, **kwargs):
         """Initialize an yara microengine"""
         scanner = Scanner()
         super().__init__(client, scanner, **kwargs)

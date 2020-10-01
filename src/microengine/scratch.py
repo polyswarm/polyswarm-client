@@ -45,7 +45,7 @@ class Microengine(AbstractMicroengine):
     """
     Scratch microengine is the same as the default behavior.
     """
-    def __init__(self, client, **kwargs):
+    def __init__(self, client, scanner=None, **kwargs):
         """Initialize an scratch microengine"""
         scanner = Scanner()
         super().__init__(client, scanner, **kwargs)

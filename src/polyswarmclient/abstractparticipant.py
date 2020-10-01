@@ -90,7 +90,10 @@ class AbstractParticipant(object):
         result = ScanResult()
         artifact_type = ArtifactType.from_string(bounty.artifact_type)
         if artifact_type == ArtifactType.FILE:
-            content = await self.client.get_artifact(bounty.artifact_url)
+            async with aiohttp.ClientSession(raise_for_status=True) as session:
+                async with session.get(bounty.artifact_url) as response:
+                    content = await response.content.read()
+
             metadata = FileArtifact(filename=bounty.sha256, filesize=len(content), mimetype=bounty.mimetype,
                                     sha256=bounty.sha256)
         elif artifact_type == ArtifactType.URL:

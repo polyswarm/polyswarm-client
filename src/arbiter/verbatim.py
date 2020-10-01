@@ -23,7 +23,7 @@ class Arbiter(AbstractArbiter):
 
     def __init__(self, client, **kwargs):
         """Initialize a verbatim arbiter"""
-        super().__init__(client, None, **kwargs)
+        super().__init__(client, scanner=None, **kwargs)
 
         db_pth = os.path.join(ARTIFACT_DIRECTORY, 'truth.db')
 
