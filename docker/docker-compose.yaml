@@ -40,8 +40,8 @@ services:
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - QUEUE=microengine
-      - BACKEND=eicar
-      - COMMAND=arbiter
+      - BACKEND=producer
+      - COMMAND=microengine
   microengine-worker:
     build:
       context: ../

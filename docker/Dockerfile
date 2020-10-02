@@ -4,6 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1"
 ENV COMMAND="microengine"
 
+WORKDIR /usr/src/app
+
 # Exclude documentation packages from being installed
 RUN printf 'path-exclude /usr/share/%s/*\n' doc man groff info lintian linda > /etc/dpkg/dpkg.cfg.d/01_nodoc
 
@@ -20,7 +22,6 @@ RUN apt-get update -y \
         wget \
         g++
 
-WORKDIR /usr/src/app
 
 COPY . .
 ARG PIP_INDEX_URL="https://pypi.python.org/simple"
@@ -37,4 +38,4 @@ RUN pip3 install --no-cache-dir -U wheel setuptools \
     && rm -r /var/lib/apt/lists/* \
     && rm -rf /tmp/* /var/tmp/*
 
-CMD bash -c "$COMMAND"
+CMD $COMMAND
