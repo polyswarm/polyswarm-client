@@ -3,11 +3,15 @@
 
 ### 3.0.0-alpha0
 
-* **Feature** - Runs aiohttp server
-* **Feature** - Compatible with PolySwarm communities start with `something`
 * **Feature** - Replaced websocket event notifications with webhooks
-* **Feature** - Removed all Ethereum primatives to simplify creating microengines/arbiters
+* **Feature** - Runs aiohttp server to receive webhooks
+* **Feature** - Removed all passwords & keyfiles to simplify creating microengines/arbiters (NCT/ETH management moved out of polyswarmclient)
 * **Feature** - Support 4 state response from `ScanResult`, `unknown`, `suspicious`, `benign`, `malicious`
+* **Feature** - Includes simple integration test to use with `docker/docker-compose` for faster testing
+* **Feature** - Eliminates long running schedule of tasks for the future
+* **Feature** - Supports bounty artifact_url outside PolySwarm domains
+* **Feature** - Deduplicated Arbiter/Microengine code into `AbstractParticipant`
+* **Drop** - Remove support for custom `Ambassador` classes
 
 
 ### Four state `ScanResult` from `bit` and `verdict`
@@ -19,20 +23,61 @@
 
 #### Breaking Changes
 
-If you use participant template there is no extra work required beyond upgrading, and not calling removed commands.
-Users that developed child classes of either `AbstractArbiter` or `AbstractMicroengine` will need to read below, and match the breaking changes below.
+Existing microengines/arbiters created with participant-template should be able to upgrade and keep working with no code changes.
+The only change participant template users must make, is to remove the balancemanager service from marketplace.yaml, or whatever system is used to start the microengine/arbiter.
 
-1. Removed callbacks `on_deprecated`, `on_new_assertion`, `on_reveal_assertion`, `on_new_vote`, `on_vote_due`, `on_settle`, `on_new_block`, `on_qorum_reached`
-1. Removed event scheduler, and events `RevealAssertion`, VoteOnBounty`, `SettleBounty`
-1. Removed BidStrategyBase
-1. Removed `bid()` from `AbstractMicroengine`
-1. Removed multi-artifact handling from `AbstractMicroengine` and `AbstractAmbassador`
-1. Replaced `fetch_and_scan_all` in `AbstractMicroengine`, and `AbstractArbiter` with `fetch_and_scan` which scans a single artifact
+Users that developed child classes of either `AbstractArbiter` or `AbstractMicroengine` will need to read below, and match the breaking changes below.
+This is not a comprehensive list of removals, but this should encapsulate all the changes that impact a Microengine/Arbiter developer.
+
+#### Ambassador
+
 1. Removed `AbstractAmbassador`
-1. Removed commands `balancemanager`, `liveness`, `liveliness`, `ambassador`
+1. Removed `AbstractAmbassador` implementations
+1. Removed `ambassador` command
+
+#### Microengine
+
+1. Changed `Microengine.__init__` signature to `__init__(client: Client, scanner: Scanner=None)`
+1. Truncated BidStrategyBase. It is no longer used, but is required for participant-template compatibility
+1. Removed `Microengine.bid()`. Confidence is used directly to determine bid amount.
+1. Only supports single-artifact bounties
+1. `fetch_and_scan_all` replaced with `fetch_and_scan`
+1. Removed `Filter`, and all subclasses.
+1. Deactivated `--filters` option, including `accept|reject` and `favor|penalize`
+
+#### Arbiter
+
+1. Changed `Arbiter.__init__` signature to `__init__(self, client: Client, scanner: Scanner=None)`
+1. Only supports single-artifact bounties
+1. `fetch_and_scan_all` replaced with `fetch_and_scan`
+
+#### Client
+
+1. Changed `Client.__init__` signature to `__init__(self, api_key=None, host="0.0.0.0", port="8080")`
 1. Removed sub-clients `BountiesClient`, `BalanceClient`, `RelayClient`, `Offersclient`, `StakingClient`
-1. Remove `--filters` including both `accept|reject`, `favor|penalize`, as these features are moving into the webhook distribution service
-1. Changed callback `on_new_bounty` parameters to accept a `Bounty` object. (src/polyswarmclient/server/events.py)
+1. Removed `Client.list_artifacts()`
+1. Removed `Client.get_artifact()` (Downloaded directly in `AbstractParticipant.fetch_and_scan`)
+1. Removed `Client.get_artifact_count()`, since the answer is always `1`, now
+1. Removed `Client.to_wei()`, and `Client.from_wei()`
+1. Removed `Client.post_artifacts()`
+1. Removed `Client.schedule()`
+1. Removed `Client.listen_for_events()`
+1. Removed event schedule system, and events `RevealAssertion`, VoteOnBounty`, `SettleBounty`
+1. Removed callbacks `on_deprecated`, `on_new_assertion`, `on_reveal_assertion`, `on_new_vote`, `on_vote_due`, `on_settle`, `on_new_block`, `on_quorum_reached`
+1. Changed callback `on_new_bounty` to take a `Bounty` object. (src/polyswarmclient/server/events.py)
+
+#### Liveness
+
+1. Removed all liveness and liveliness support
+
+#### Balancemanager
+
+1. Removed balancemanager
+
+### Utils
+
+1. Remove `to_bytes`, `sha3`, `int_to_bytes`, `int_to_bool`, `guid_as_string`, `calculate_commitment`, `check_response`, `finalize_polyswarmd_addr`, `fill_scheme`
+
 
 ### 2.10.1 (2020-08-14)
 
