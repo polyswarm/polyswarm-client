@@ -22,6 +22,7 @@ benign_digest = hmac.new(API_KEY.encode('utf-8'), benign_contents.encode('utf-8'
 
 empty_digest = hmac.new(API_KEY.encode('utf-8'), b'', digestmod='sha256').hexdigest()
 
+
 @application.route("/", methods=['POST'])
 def test_receiver():
     body = request.get_json()
