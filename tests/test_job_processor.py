@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.asyncio
 async def job_processor(event_loop, redis_client) -> JobProcessor:
     asyncio.set_event_loop(event_loop)
-    async with JobProcessor(redis_client, 'QUEUE', None) as processor:
+    async with JobProcessor(redis_client, 'QUEUE') as processor:
         yield processor
 
 
@@ -28,7 +28,7 @@ async def job_processor(event_loop, redis_client) -> JobProcessor:
 async def test_result_values_in_redis(redis_client, job_processor):
     job = JobRequest('polyswarmd-addr', 'guid', 0, 'uri', ArtifactType.FILE.value, 10, None, 'side', int(time.time()))
     future = Future()
-    await job_processor.register_job('guid', 'test_result_values_in_redis', [job], future)
+    await job_processor.register_job('guid', 'test_result_values_in_redis', job, future)
 
     # Add response before waiting on the future
     job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
@@ -49,7 +49,7 @@ async def test_result_values_in_redis(redis_client, job_processor):
 async def test_results_after_complete(redis_client, job_processor):
     job = JobRequest('polyswarmd-addr', 'guid', 0, 'uri', ArtifactType.FILE.value, 10, None, 'side', int(time.time()))
     future = Future()
-    await job_processor.register_job('guid', 'test_results_after_complete', [job], future)
+    await job_processor.register_job('guid', 'test_results_after_complete', job, future)
 
     # Add response before waiting on the future
     job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
@@ -61,46 +61,6 @@ async def test_results_after_complete(redis_client, job_processor):
     assert scan_results[0].bit
     assert not scan_results[0].verdict
     assert scan_results[0].confidence == .5
-
-
-@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
-async def test_results_multiple_results(redis_client, job_processor):
-    # Add responses before pushing job
-    for i in range(2):
-        job_response = JobResponse(index=i, bit=True, verdict=False, confidence=.5, metadata='')
-        await redis_client.rpush('test_results_multiple_results', json.dumps(job_response.asdict()))
-
-    future = Future()
-    jobs = [JobRequest('polyswarmd-addr', 'guid', i, 'uri', ArtifactType.FILE.value, 1, None, 'side', int(time.time()))
-            for i in range(2)]
-    await job_processor.register_job('guid', 'test_results_multiple_results', jobs, future)
-
-    scan_results = await future
-
-    assert len(scan_results) == 2
-    assert scan_results[0].bit
-
-
-@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
-async def test_results_after_timeout(redis_client, job_processor):
-    # Add response before registering
-    job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
-    await redis_client.rpush('test_results_after_timeout', json.dumps(job_response.asdict()))
-
-    jobs = [JobRequest('polyswarmd-addr', 'guid', i, 'uri', ArtifactType.FILE.value, 1, None, 'side', int(time.time()))
-            for i in range(1)]
-
-    future = Future()
-    await job_processor.register_job('guid', 'test_results_after_timeout', jobs, future)
-
-    scan_results = await future
-
-    assert len(scan_results) == 1
-    assert scan_results[0].bit
 
 
 @pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')

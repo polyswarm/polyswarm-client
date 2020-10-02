@@ -22,44 +22,8 @@ MAX_WAIT = int(os.getenv('WORKER_BACKOFF', '15'))
 MAX_WORKERS = 4
 
 
-def to_bytes(value):
-    if isinstance(value, bytes):
-        return value
-    if isinstance(value, str):
-        return bytes(value, 'utf-8')
-    if isinstance(value, int):
-        return bytes(str(value), 'utf-8')
-
-
-def int_to_bytes(i):
-    h = hex(i)[2:]
-    return bytes.fromhex('0' * (64 - len(h)) + h)
-
-
-def int_from_bytes(b):
-    return int.from_bytes(b, byteorder='big')
-
-
 def bool_list_to_int(bs):
     return sum([1 << n if b else 0 for n, b in enumerate(bs)])
-
-
-def int_to_bool_list(i, expected_size):
-    # return empty list when 0 and no items expected (Return actual value if > 0)
-    if expected_size == 0 and i == 0:
-        return []
-    s = format(i, 'b')
-    bool_list = [x == '1' for x in s[::-1]]
-    diff = expected_size - len(bool_list)
-    bool_list.extend([False] * diff)
-    if diff < 0:
-        logger.warning('expected %s bool values when converting %s, found %s in %s', expected_size, i, len(bool_list),
-                       bool_list)
-    return bool_list
-
-
-def guid_as_string(guid):
-    return str(uuid.UUID(int=int(guid), version=4))
 
 
 def configure_event_loop():
@@ -77,7 +41,7 @@ def configure_event_loop():
 def asyncio_join():
     """Gather all remaining tasks, assumes loop is not running"""
     loop = asyncio.get_event_loop()
-    pending = asyncio.Task.all_tasks(loop)
+    pending = asyncio.all_tasks(loop)
 
     loop.run_until_complete(asyncio.wait(pending, loop=loop, timeout=TASK_TIMEOUT))
 
@@ -85,7 +49,7 @@ def asyncio_join():
 def asyncio_stop():
     """Stop the main event loop"""
     loop = asyncio.get_event_loop()
-    pending = asyncio.Task.all_tasks(loop)
+    pending = asyncio.all_tasks(loop)
 
     for task in pending:
         task.cancel()

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 MAX_ARTIFACTS = 1
 RATE_LIMIT_SLEEP = 2.0
 MAX_BACKOFF = 32
+LONG_SLEEP = 24 * 60 * 60
 
 
 class Client(object):
@@ -24,6 +25,7 @@ class Client(object):
     host: str
     port: str
     rate_limit: Optional[RequestRateLimit]
+    server = Optional[Server]
 
     """Client to connected to a Ethereum wallet as well as a polyswarmd instance.
 
@@ -39,6 +41,7 @@ class Client(object):
         self.rate_limit = None
         self.host = host
         self.port = port
+        self.server = None
 
         # Events from polyswarmd
         self.on_new_bounty = events.OnNewBountyCallback()
@@ -68,18 +71,18 @@ class Client(object):
         """
         loop = asyncio.get_event_loop()
         self.rate_limit = await RequestRateLimit.build()
-        loop.create_task(self.on_run.run(chain=''))
+        await self.on_run.run(chain='')
 
         def callback(bounty: Bounty):
             loop.create_task(self.on_new_bounty.run(bounty))
 
-        s = Server(self.api_key, self.host, self.port, bounty_callback=callback)
+        self.server = Server(self.api_key, self.host, self.port, bounty_callback=callback)
+        logger.info('Starting server')
         try:
-            logger.info('Starting server')
-            await s.run()
-        finally:
-            loop.create_task(self.on_stop.run())
-            await s.stop()
+            await self.server.run()
+        except asyncio.CancelledError:
+            await self.on_stop.run()
+            raise
 
     @utils.return_on_exception((aiohttp.ServerDisconnectedError, asyncio.TimeoutError, aiohttp.ClientOSError,
                                 aiohttp.ContentTypeError, RateLimitedError), default=(False, {}))

@@ -24,6 +24,7 @@ class Server:
     host: str
     port: str
     site: Optional[TCPSite]
+    runner: Optional[web.AppRunner]
     event: Optional[Event]
     bounty_callback: Callable
 
@@ -43,23 +44,17 @@ class Server:
         # start aiojobs to handle closed connections
         aiojobs.aiohttp.setup(app)
         # Start up the endpoint
-        runner = aiohttp.web.AppRunner(app)
-        await runner.setup()
+        self.runner = aiohttp.web.AppRunner(app)
+        await self.runner.setup()
 
-        self.site = aiohttp.web.TCPSite(runner, self.host, int(self.port))
+        self.site = aiohttp.web.TCPSite(self.runner, self.host, int(self.port))
 
-        await self.site.start()
         logger.info('Starting server at %s:%s', self.host, self.port)
-        self.event = asyncio.Event()
-        await self.event.wait()
-        logger.info('Shutting down server')
-        await runner.cleanup()
+        await self.site.start()
 
     async def stop(self):
-        if self.site:
-            await self.site.stop()
-        if self.event:
-            self.event.set()
+        await self.site.stop()
+        await self.runner.cleanup()
 
     @web.middleware
     async def verify_sender(self, request, handler):
@@ -69,12 +64,17 @@ class Server:
             raise HTTPBadRequest()
 
         body = await request.read()
-        digest = hmac.new(self.api_key.encode('utf-8'), body, digestmod='sha256').hexdigest()
-        logger.debug('Comparing computed %s vs given %s', digest, signature)
-        if not hmac.compare_digest(digest, signature):
+        loop = asyncio.get_event_loop()
+        computed_signature = await loop.run_in_executor(None, self.generate_hmac, self.api_key.encode('utf-8'), body)
+        logger.debug('Comparing computed %s vs given %s', computed_signature, signature)
+        if not await loop.run_in_executor(None, hmac.compare_digest, computed_signature, signature):
             raise HTTPForbidden()
 
         return await handler(request)
+
+    @staticmethod
+    def generate_hmac(key, body):
+        return hmac.new(key, body, digestmod='sha256').hexdigest()
 
     def generate_routes(self):
         routes = web.RouteTableDef()
