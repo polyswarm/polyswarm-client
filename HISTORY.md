@@ -3,25 +3,25 @@
 
 ### 3.0.0-alpha0
 
-* **Feature** - Replaced websocket event notifications with webhooks
+* **Feature** - Replaces websocket event notifications with webhooks
 * **Feature** - Runs aiohttp server to receive webhooks
-* **Feature** - Removed all passwords & keyfiles to simplify creating microengines/arbiters (NCT/ETH management moved out of polyswarmclient)
-* **Feature** - Support 4 state response from `ScanResult`, `unknown`, `suspicious`, `benign`, `malicious`
+* **Feature** - Removes all passwords & keyfiles to simplify creating microengines/arbiters (NCT/ETH management moved out of polyswarmclient)
+* **Feature** - Supports 4 state response from `ScanResult`: `unknown`, `suspicious`, `benign`, `malicious`
 * **Feature** - Includes simple integration test to use with `docker/docker-compose` for faster testing
 * **Feature** - Eliminates long running schedule of tasks for the future
 * **Feature** - Supports bounty artifact_url outside PolySwarm domains
-* **Feature** - Deduplicated Arbiter/Microengine code into `AbstractParticipant`
-* **Drop** - Remove support for custom `Ambassador` classes
+* **Feature** - Deduplicates Arbiter/Microengine code into `AbstractParticipant`
+* **Drop** - Removes support for custom `Ambassador` classes
 
 
-### Four state `ScanResult` from `bit` and `verdict`
-* `bit=False`, `verdict=False`: 'unknown'
-* `bit=False`, `verdict=True`: 'suspicious'
-* `bit=True`, `verdict=False`: 'benign'
-* `bit=True`, `verdict=True`: 'malicious'
+#### Four state `ScanResult` from `bit` and `verdict`
+* (`bit=False`, `verdict=False`) *->* 'unknown'
+* (`bit=False`, `verdict=True`) *->* 'suspicious'
+* (`bit=True`, `verdict=False`) *->* 'benign'
+* (`bit=True`, `verdict=True`) *->* 'malicious'
 
 
-#### Breaking Changes
+### Breaking Changes
 
 Existing microengines/arbiters created with participant-template should be able to upgrade and keep working with no code changes.
 The only change participant template users must make, is to remove the balancemanager service from marketplace.yaml, or whatever system is used to start the microengine/arbiter.
@@ -54,6 +54,7 @@ This is not a comprehensive list of removals, but this should encapsulate all th
 #### Client
 
 1. Changed `Client.__init__` signature to `__init__(self, api_key=None, host="0.0.0.0", port="8080")`
+1. Changed callback `on_new_bounty` to take a [Bounty](src/polyswarmclient/server/events/py)` object
 1. Removed sub-clients `BountiesClient`, `BalanceClient`, `RelayClient`, `Offersclient`, `StakingClient`
 1. Removed `Client.list_artifacts()`
 1. Removed `Client.get_artifact()` (Downloaded directly in `AbstractParticipant.fetch_and_scan`)
@@ -62,9 +63,8 @@ This is not a comprehensive list of removals, but this should encapsulate all th
 1. Removed `Client.post_artifacts()`
 1. Removed `Client.schedule()`
 1. Removed `Client.listen_for_events()`
-1. Removed event schedule system, and events `RevealAssertion`, VoteOnBounty`, `SettleBounty`
+1. Removed event schedule system, and events `RevealAssertion`, `VoteOnBounty`, `SettleBounty`
 1. Removed callbacks `on_deprecated`, `on_new_assertion`, `on_reveal_assertion`, `on_new_vote`, `on_vote_due`, `on_settle`, `on_new_block`, `on_quorum_reached`
-1. Changed callback `on_new_bounty` to take a `Bounty` object. (src/polyswarmclient/server/events.py)
 
 #### Liveness
 
@@ -74,7 +74,7 @@ This is not a comprehensive list of removals, but this should encapsulate all th
 
 1. Removed balancemanager
 
-### Utils
+#### Utils
 
 1. Remove `to_bytes`, `sha3`, `int_to_bytes`, `int_to_bool`, `guid_as_string`, `calculate_commitment`, `check_response`, `finalize_polyswarmd_addr`, `fill_scheme`
 
