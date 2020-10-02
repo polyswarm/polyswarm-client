@@ -15,10 +15,10 @@
 
 
 #### Four state `ScanResult` from `bit` and `verdict`
-* (`bit=False`, `verdict=False`) *->* 'unknown'
-* (`bit=False`, `verdict=True`) *->* 'suspicious'
-* (`bit=True`, `verdict=False`) *->* 'benign'
-* (`bit=True`, `verdict=True`) *->* 'malicious'
+* (`bit=False`, `verdict=False`) **->** 'unknown'
+* (`bit=False`, `verdict=True`) **->** 'suspicious'
+* (`bit=True`, `verdict=False`) **->** 'benign'
+* (`bit=True`, `verdict=True`) **->** 'malicious'
 
 
 ### Breaking Changes
@@ -54,7 +54,7 @@ This is not a comprehensive list of removals, but this should encapsulate all th
 #### Client
 
 1. Changed `Client.__init__` signature to `__init__(self, api_key=None, host="0.0.0.0", port="8080")`
-1. Changed callback `on_new_bounty` to take a [Bounty](src/polyswarmclient/server/events/py)` object
+1. Changed callback `on_new_bounty` to take a [Bounty](src/polyswarmclient/server/events.py) object
 1. Removed sub-clients `BountiesClient`, `BalanceClient`, `RelayClient`, `Offersclient`, `StakingClient`
 1. Removed `Client.list_artifacts()`
 1. Removed `Client.get_artifact()` (Downloaded directly in `AbstractParticipant.fetch_and_scan`)
