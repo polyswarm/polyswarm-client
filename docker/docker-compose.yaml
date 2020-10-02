@@ -4,7 +4,7 @@ services:
   redis:
     image: "redis"
     networks:
-      - microengine-webhooks
+      - polyswarmclient-webhooks
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
     ports:
@@ -16,20 +16,20 @@ services:
     ports:
       - "5000:5000"
     networks:
-      - microengine-webhooks
+      - polyswarmclient-webhooks
       - default
     environment:
       - PYTHONUNBUFFERED=1
       - API_KEY=00000000000000000000000000000000
-      - WEBHOOK_URL=http://microengine-webhooks-psc:8080/
-  microengine-webhooks-psc:
+      - WEBHOOK_URL=http://psc-webhooks:8080/
+  psc-webhooks:
     depends_on:
       - redis
     build:
       context: ../
       dockerfile: docker/Dockerfile
     networks:
-      - microengine-webhooks
+      - polyswarmclient-webhooks
     environment:
       - PYTHONUNBUFFERED=1
       - API_KEY=00000000000000000000000000000000
@@ -40,54 +40,21 @@ services:
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - QUEUE=microengine
-      - BACKEND=producer
-      - COMMAND=microengine
-
-  arbiter-webhooks-psc:
-    depends_on:
-      - redis
-    build:
-      context: ../
-      dockerfile: docker/Dockerfile
-    networks:
-      - microengine-webhooks
-    environment:
-      - PYTHONUNBUFFERED=1
-      - API_KEY=00000000000000000000000000000000
-      - LOG_LEVEL=INFO
-      - CLIENT_LOG_LEVEL=INFO
-      - LOG_FORMAT=text
-      - HOST=0.0.0.0
-      - PORT=8080
-      - REDIS_ADDR=redis:6379
-      - QUEUE=arbiter
-      - BACKEND=producer
+      - BACKEND=eicar
       - COMMAND=arbiter
   microengine-worker:
     build:
       context: ../
       dockerfile: docker/Dockerfile
     networks:
-      - microengine-webhooks
+      - polyswarmclient-webhooks
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_ADDR=redis:6379
       - QUEUE=microengine
       - BACKEND=eicar
       - COMMAND=worker
-  arbiter-worker:
-    build:
-      context: ../
-      dockerfile: docker/Dockerfile
-    networks:
-      - microengine-webhooks
-    environment:
-      - PYTHONUNBUFFERED=1
-      - REDIS_ADDR=redis:6379
-      - QUEUE=arbiter
-      - BACKEND=eicar
-      - COMMAND=worker
 
 networks:
-  microengine-webhooks:
+  polyswarmclient-webhooks:
     driver: bridge
