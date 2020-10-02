@@ -1,3 +1,5 @@
+from asyncio import Future
+
 import aiohttp
 import asyncio
 import logging
@@ -80,6 +82,9 @@ class Client(object):
         logger.info('Starting server')
         try:
             await self.server.run()
+            # Don't exit unless cancelled
+            future = Future()
+            await future
         except asyncio.CancelledError:
             await self.on_stop.run()
             raise
