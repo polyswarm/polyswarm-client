@@ -11,7 +11,7 @@ from polyswarmclient.config import init_logging
               help='Input directory of benign files')
 @click.option('--output', type=click.Path(), default='./artifacts/truth.db',
               help='Output database file.')
-@click.option('--log_format', default='text',
+@click.option('--log_format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 def main(malicious, benign, output, log_format):
     init_logging([], log_format)

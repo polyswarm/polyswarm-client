@@ -49,9 +49,9 @@ def choose_backend(backend):
 
 
 @click.command()
-@click.option('--log', default='WARNING',
+@click.option('--log', envvar='LOG_LEVEL', default='WARNING',
               help='Logging level')
-@click.option('--client-log', default='WARNING',
+@click.option('--client-log', envvar='CLIENT_LOG_LEVEL', default='WARNING',
               help='PolySwarm Client log level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='https://api.polyswarm.network/v1/default',
               help='Address (scheme://host:port) of polyswarmd instance')
@@ -73,7 +73,7 @@ def choose_backend(backend):
               help='Chain(s) to operate on')
 @click.option('--watchdog', default=0,
               help='Number of blocks to check if bounties are being processed')
-@click.option('--log-format', default='text',
+@click.option('--log-format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--submission-rate', default=0, type=click.FLOAT,
               help='How often to submit a new sample in seconds. Default: No delay between submissions.')

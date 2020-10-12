@@ -9,9 +9,9 @@ from polyswarmclient.liveness.local import LocalLivenessCheck
 
 
 @click.command()
-@click.option('--log', default='WARNING',
+@click.option('--log', envvar='LOG_LEVEL', default='WARNING',
               help='Logging level')
-@click.option('--log-format', default='text',
+@click.option('--log-format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--loop-update-threshold', default=5,
               help='Maximum time since last loop iteration in polyswarm-client.Client before failing check')

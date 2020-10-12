@@ -49,11 +49,11 @@ def polyswarm_client(func):
 
 
 @click.group()
-@click.option('--log', default='WARNING',
+@click.option('--log', envvar='LOG_LEVEL', default='WARNING',
               help='Logging level')
-@click.option('--client-log', default='WARNING',
+@click.option('--client-log', envvar='CLIENT_LOG_LEVEL', default='WARNING',
               help='PolySwarm Client log level')
-@click.option('--log-format', default='text',
+@click.option('--log-format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 def cli(log, client_log, log_format):
     """

@@ -48,9 +48,9 @@ def choose_backend(backend):
 
 
 @click.command()
-@click.option('--log', default='WARNING',
+@click.option('--log', envvar='LOG_LEVEL', default='WARNING',
               help='Logging level')
-@click.option('--client-log', default='WARNING',
+@click.option('--client-log', envvar='CLIENT_LOG_LEVEL', default='WARNING',
               help='PolySwarm Client log level')
 @click.option('--redis-addr', envvar='REDIS_ADDR', default='localhost:6379',
               help='Address (host:port) of polyswarmd instance')
@@ -68,7 +68,7 @@ def choose_backend(backend):
               help='Limit number of simultaneous scans')
 @click.option('--testing', default=0,
               help='Activate testing mode for integration testing, respond to N bounties and N offers then exit')
-@click.option('--log-format', default='text',
+@click.option('--log-format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--scan_time_requirement', envvar='SCAN_TIME_REQUIREMENT', default=3,
               help='Minimum number of seconds this engine requires to scan a file; artifacts with less time remaining will be ignored')
