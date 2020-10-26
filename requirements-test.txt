@@ -1,4 +1,5 @@
 asynctest==0.13.0
+aioresponses==0.6.4
 coverage==5.1
 deepdiff==4.0.7
 hypothesis==5.16.0
