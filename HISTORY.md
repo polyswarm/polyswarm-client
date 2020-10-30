@@ -1,5 +1,19 @@
 # Release History
 
+### 2.11.0
+
+* **Feature** - Add RedisRateLimit class for finer grained rate limits from days down to seconds.
+
+
+### 2.10.3 (2020-10-12)
+
+* **Feature** - Add env variable controls for LOG_LEVEL and LOG_FORMAT
+
+
+### 2.10.2 (2020-09-15)
+
+* **Feature** - Add time ratio results in redis for scaling producer/worker configurations
+
 ### 2.10.1 (2020-08-14)
 
 * **Fix** - Add `--allow-key-over-http` in `Worker`

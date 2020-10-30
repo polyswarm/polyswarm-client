@@ -33,14 +33,18 @@ async def test_result_values_in_redis(redis_client, job_processor):
     # Add response before waiting on the future
     job_response = JobResponse(index=0, bit=True, verdict=False, confidence=.5, metadata='')
 
+    await asyncio.sleep(1)
     await redis_client.rpush('test_result_values_in_redis', json.dumps(job_response.asdict()))
     await future
 
-    assert await redis_client.get('QUEUE_job_completion_time_accum') > 0
-    assert await redis_client.get('QUEUE_job_completion_times_count') == 1
-    assert 0 < await redis_client.get('QUEUE_job_completion_time_ratios_accum') < 1
-    assert await redis_client.get('QUEUE_job_completion_time_ratios_count') == 1
-    assert await redis_client.get('QUEUE_scan_result_counter') == 1
+    # wait for the loop to finish in job_processor
+    await asyncio.sleep(1)
+
+    assert float(await redis_client.get('QUEUE_job_completion_time_accum')) > 0
+    assert int(await redis_client.get('QUEUE_job_completion_times_count')) == 1
+    assert 0 < float(await redis_client.get('QUEUE_job_completion_time_ratios_accum')) < 1
+    assert int(await redis_client.get('QUEUE_job_completion_time_ratios_count')) == 1
+    assert int(await redis_client.get('QUEUE_scan_result_counter')) == 1
 
 
 @pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')

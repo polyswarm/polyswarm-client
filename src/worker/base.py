@@ -18,7 +18,7 @@ from polyswarmclient.exceptions import ApiKeyException, FatalError, ScannerSetup
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
 from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
-from polyswarmclient.utils import asyncio_join, asyncio_stop, MAX_WAIT, configure_event_loop
+from polyswarmclient.utils import asyncio_join, asyncio_stop, configure_event_loop
 from worker.exceptions import ExpiredException
 
 logger = logging.getLogger(__name__)
