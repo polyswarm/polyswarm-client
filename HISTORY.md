@@ -1,5 +1,11 @@
 # Release History
 
+
+### 2.11.1
+
+* **Feature** - Add feature flags in `worker` command to enable hourly, minutely, and secondly rate limits in `Worker`.
+
+
 ### 2.11.0
 
 * **Feature** - Add RedisRateLimit class for finer grained rate limits from days down to seconds.

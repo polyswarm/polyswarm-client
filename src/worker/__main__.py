@@ -71,13 +71,20 @@ def choose_backend(backend):
 @click.option('--log-format', envvar='LOG_FORMAT', default='text',
               help='Log format. Can be `json` or `text` (default)')
 @click.option('--scan_time_requirement', envvar='SCAN_TIME_REQUIREMENT', default=3,
-              help='Minimum number of seconds this engine requires to scan a file; artifacts with less time remaining will be ignored')
+              help='Minimum time in seconds required to scan an artifact. Jobs with less time will be ignored')
 @click.option('--daily-rate-limit', envvar='DAILY_RATE_LIMIT', default=None,
-              help='Number of daily scans allowed')
+              help='Number of scans allowed per day')
+@click.option('--hourly-rate-limit', envvar='HOURLY_RATE_LIMIT', default=None,
+              help='Number of scans allowed per hour')
+@click.option('--minutely-rate-limit', envvar='MINUTELY_RATE_LIMIT', default=None,
+              help='Number of scans allowed per minute')
+@click.option('--secondly-rate-limit', envvar='SECONDLY_RATE_LIMIT', default=None,
+              help='Number of scans allowed per second')
 @click.option('--allow-key-over-http', is_flag=True, envvar='ALLOW_KEY_OVER_HTTP',
               help='Force api keys over http (Not Recommended)')
 def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, scan_limit, api_key, testing, log_format,
-         scan_time_requirement, daily_rate_limit, allow_key_over_http):
+         scan_time_requirement, daily_rate_limit, hourly_rate_limit, minutely_rate_limit, secondly_rate_limit,
+         allow_key_over_http):
     """Entrypoint for the worker driver
     """
     if tasks != 0:
@@ -98,7 +105,8 @@ def main(log, client_log, redis_addr, queue, backend, tasks, download_limit, sca
 
     logger.info('Running worker with %s tasks', tasks if tasks > 0 else 'unlimited')
     worker = Worker(redis_addr, queue, tasks, download_limit, scan_limit, api_key, testing, scanner,
-                    scan_time_requirement, daily_rate_limit, allow_key_over_http)
+                    scan_time_requirement, daily_rate_limit, hourly_rate_limit, minutely_rate_limit, secondly_rate_limit,
+                    allow_key_over_http)
     worker.run()
 
 

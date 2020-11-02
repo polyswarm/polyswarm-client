@@ -10,20 +10,57 @@ import time
 import urllib3.util
 
 from aiohttp import ClientSession
-from typing import AsyncGenerator
+from polyswarmclient.ratelimit.abstractratelimit import AbstractRateLimit
+from typing import AsyncGenerator, Optional
 
 from polyswarmartifact import DecodeError
 from polyswarmclient.liveness.local import LocalLivenessRecorder
 from polyswarmclient.exceptions import ApiKeyException, FatalError, ScannerSetupFailedError
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.producer import JobResponse, JobRequest
-from polyswarmclient.ratelimit.redis import RedisDailyRateLimit
+from polyswarmclient.ratelimit.redis import RedisRateLimit, DailyKeyManager, HourlyKeyManager, \
+    MinutelyKeyManager, SecondlyKeyManager
 from polyswarmclient.utils import asyncio_join, asyncio_stop, configure_event_loop
 from worker.exceptions import ExpiredException
 
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 5.0
+
+
+class RateLimitAggregate(AbstractRateLimit):
+    daily: Optional[RedisRateLimit]
+    hourly: Optional[RedisRateLimit]
+    minutely: Optional[RedisRateLimit]
+    secondly: Optional[RedisRateLimit]
+
+    def __init__(self, redis, queue, daily_rate_limit, hourly_rate_limit, minutely_rate_limit, secondly_rate_limit):
+        self.daily = None
+        self.hourly = None
+        self.minutely = None
+        self.secondly = None
+
+        if daily_rate_limit is not None:
+            self.daily = RedisRateLimit(redis, queue, daily_rate_limit, key_manager=DailyKeyManager())
+
+        if hourly_rate_limit is not None:
+            self.hourly = RedisRateLimit(redis, queue, hourly_rate_limit, key_manager=HourlyKeyManager())
+
+        if minutely_rate_limit is not None:
+            self.minutely = RedisRateLimit(redis, queue, minutely_rate_limit, key_manager=MinutelyKeyManager())
+
+        if secondly_rate_limit is not None:
+            self.secondly = RedisRateLimit(redis, queue, secondly_rate_limit, key_manager=SecondlyKeyManager())
+
+    async def use(self, *args, peek=False, **kwargs):
+        # Start with fastest rate limit, so we don't consumer slower limits when a faster limit is exhausted
+        # But, it will use higher rate limits along with lower rate limits
+        for rate_limit in [self.secondly, self.minutely, self.hourly, self.daily]:
+            if rate_limit is not None:
+                if not await rate_limit.use(*args, peek, **kwargs):
+                    return False
+        else:
+            return True
 
 
 class OptionalSemaphore(asyncio.Semaphore):
@@ -50,7 +87,8 @@ class OptionalSemaphore(asyncio.Semaphore):
 
 class Worker:
     def __init__(self, redis_addr, queue, task_count=0, download_limit=0, scan_limit=0, api_key=None, testing=0,
-                 scanner=None, scan_time_requirement=0, daily_rate_limit=None, allow_key_over_http=False):
+                 scanner=None, scan_time_requirement=0, daily_rate_limit=None, hourly_rate_limit=None,
+                 minutely_rate_limit=None, secondly_rate_limit=None, allow_key_over_http=False):
         self.redis_uri = 'redis://' + redis_addr
         self.redis = None
         self.queue = queue
@@ -59,12 +97,15 @@ class Worker:
         self.scanner = scanner
         self.scan_time_requirement = scan_time_requirement
         self.daily_rate_limit = daily_rate_limit
+        self.hourly_rate_limit = hourly_rate_limit
+        self.minutely_rate_limit = minutely_rate_limit
+        self.secondly_rate_limit = secondly_rate_limit
         self.max_task_count = task_count
         self.current_task_count = 0
         self.task_count_lock = None
         self.download_limit = download_limit
         self.scan_limit = scan_limit
-        self.redis_daily_rate_limit = None
+        self.rate_limit_aggregate = None
         self.download_semaphore = None
         self.scan_semaphore = None
         self.tries = 0
@@ -128,7 +169,7 @@ class Worker:
     async def setup_redis(self, loop: asyncio.AbstractEventLoop):
         self.redis = await aioredis.create_redis_pool(self.redis_uri, loop=loop)
         queue = f'{self.queue}_backend'
-        self.redis_daily_rate_limit = RedisDailyRateLimit(self.redis, queue, self.daily_rate_limit)
+        self.rate_limit_aggregate = RateLimitAggregate(self.redis, queue, self.daily_rate_limit, self.hourly_rate_limit, self.minutely_rate_limit, self.secondly_rate_limit)
 
     async def run_task(self):
         loop = asyncio.get_event_loop()
@@ -177,12 +218,12 @@ class Worker:
                 remaining_time = self.get_remaining_time(job)
 
                 # Don't was bandwitdh and resources downloading files if we hit the rate limit
-                if await self.redis_daily_rate_limit.use(peek=True):
+                if await self.rate_limit_aggregate.use(peek=True):
                     content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
                     remaining_time = self.get_remaining_time(job)
 
                     # Double check there are still scans remaining, and also increment the account just before scanning
-                    if await self.redis_daily_rate_limit.use():
+                    if await self.rate_limit_aggregate.use():
                         scan_result = await asyncio.wait_for(self.scan(job, content), timeout=remaining_time)
                         response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                                scan_result.metadata)
