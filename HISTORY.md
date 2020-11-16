@@ -1,12 +1,16 @@
 # Release History
 
+### 2.11.2 (2020-11-13)
 
-### 2.11.1
+* **Fix** - Send `JobResponse` with `bit=False` on rate limits, so `JobProcessor` does not report rate limit as error.
+
+
+### 2.11.1 (2020-11-02)
 
 * **Feature** - Add feature flags in `worker` command to enable hourly, minutely, and secondly rate limits in `Worker`.
 
 
-### 2.11.0
+### 2.11.0 (2020-10-30)
 
 * **Feature** - Add RedisRateLimit class for finer grained rate limits from days down to seconds.
 

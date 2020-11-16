@@ -228,6 +228,10 @@ class Worker:
                         response = JobResponse(job.index, scan_result.bit, scan_result.verdict, scan_result.confidence,
                                                scan_result.metadata)
                         loop.create_task(self.respond(job, response))
+                    else:
+                        self.rate_limit_respond(job)
+                else:
+                    self.rate_limit_respond(job)
 
                 self.tries = 0
         except OSError:
@@ -274,6 +278,12 @@ class Worker:
         async with self.scan_semaphore:
             return await self.scanner.scan(job.guid, artifact_type, artifact_type.decode_content(content), job.metadata,
                                            job.chain)
+
+    def rate_limit_respond(self, job: JobRequest):
+        loop = asyncio.get_event_loop()
+        blank = ScanResult()
+        response = JobResponse(job.index, blank.bit, blank.verdict, blank.confidence, blank.metadata)
+        loop.create_task(self.respond(job, response))
 
     async def respond(self, job: JobRequest, response: JobResponse):
         logger.info('Scan results for job %s', job.key, extra={'extra': response.asdict()})
