@@ -1,7 +1,6 @@
 import aioredis
 import aiohttp
 import asyncio
-import json
 import logging
 
 from polyswarmartifact import ArtifactType, DecodeError
@@ -10,7 +9,7 @@ from polyswarmartifact.schema import FileArtifact, URLArtifact
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
 from polyswarmclient.exceptions import FatalError
-from polyswarmclient.server.events import Bounty, ScanResultRequest
+from polyswarmclient.server.events import Bounty
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +74,7 @@ class AbstractParticipant(object):
 
         logger.info('Responding to %s bounty %s', bounty.artifact_type, bounty.guid)
 
-        request = ScanResultRequest(verdict=result.verdict_string, confidence=result.confidence, metadata=json.loads(result.metadata))
-        await self.client.make_request(method='POST', url=bounty.response_url, json=request.to_json())
+        # await self.client.make_request(method='POST', url=bounty.response_url, json=result.to_json())
 
     async def fetch_and_scan(self, bounty: Bounty) -> ScanResult:
         """Fetch and scan all artifacts concurrently
@@ -129,4 +127,3 @@ class AbstractParticipant(object):
 
         raise NotImplementedError(
             'You must 1) override this scan method OR 2) provide a scanner to your Microengine constructor')
-

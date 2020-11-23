@@ -1,5 +1,3 @@
-from io import BytesIO
-
 import aiohttp
 import aiojobs.aiohttp
 import asyncio
@@ -20,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    api_key: str
+    webhook_secret: str
     host: str
     port: str
     site: Optional[TCPSite]
@@ -28,8 +26,8 @@ class Server:
     event: Optional[Event]
     bounty_callback: Callable
 
-    def __init__(self, api_key, host, port, bounty_callback):
-        self.api_key = api_key
+    def __init__(self, webhook_secret, host, port, bounty_callback):
+        self.webhook_secret = webhook_secret
         self.host = host
         self.port = port
         self.bounty_callback = bounty_callback
@@ -65,7 +63,7 @@ class Server:
 
         body = await request.read()
         loop = asyncio.get_event_loop()
-        computed_signature = await loop.run_in_executor(None, self.generate_hmac, self.api_key.encode('utf-8'), body)
+        computed_signature = await loop.run_in_executor(None, self.generate_hmac, self.webhook_secret.encode('utf-8'), body)
         logger.debug('Comparing computed %s vs given %s', computed_signature, signature)
         if not await loop.run_in_executor(None, hmac.compare_digest, computed_signature, signature):
             raise HTTPForbidden()

@@ -23,6 +23,7 @@ LONG_SLEEP = 24 * 60 * 60
 
 class Client(object):
     api_key: str
+    webhook_secret: str
     tx_error_fatal: bool
     host: str
     port: str
@@ -38,8 +39,9 @@ class Client(object):
         port (str): Port to listen to the webhook server
     """
 
-    def __init__(self, api_key=None, host="0.0.0.0", port="8080", **kwargs):
+    def __init__(self, api_key=None, webhook_secret=None, host="0.0.0.0", port="8080", **kwargs):
         self.api_key = api_key
+        self.webhook_secret = webhook_secret
         self.rate_limit = None
         self.host = host
         self.port = port
@@ -78,7 +80,7 @@ class Client(object):
         def callback(bounty: Bounty):
             loop.create_task(self.on_new_bounty.run(bounty))
 
-        self.server = Server(self.api_key, self.host, self.port, bounty_callback=callback)
+        self.server = Server(self.webhook_secret, self.host, self.port, bounty_callback=callback)
         logger.info('Starting server')
         try:
             await self.server.run()
