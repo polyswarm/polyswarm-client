@@ -57,7 +57,7 @@ class RateLimitAggregate(AbstractRateLimit):
         # But, it will use higher rate limits along with lower rate limits
         for rate_limit in [self.secondly, self.minutely, self.hourly, self.daily]:
             if rate_limit is not None:
-                if not await rate_limit.use(*args, peek, **kwargs):
+                if not await rate_limit.use(*args, peek=peek, **kwargs):
                     return False
         else:
             return True
@@ -217,7 +217,7 @@ class Worker:
             async with self.liveness_recorder.waiting_task(job.key, round(time.time())):
                 remaining_time = self.get_remaining_time(job)
 
-                # Don't was bandwitdh and resources downloading files if we hit the rate limit
+                # Don't waste bandwidth and resources downloading files if we hit the rate limit
                 if await self.rate_limit_aggregate.use(peek=True):
                     content = await asyncio.wait_for(self.download(job, session), timeout=remaining_time)
                     remaining_time = self.get_remaining_time(job)

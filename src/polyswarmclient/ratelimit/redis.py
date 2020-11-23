@@ -100,7 +100,6 @@ class RedisRateLimit(AbstractRateLimit):
             else:
                 value = await self.redis.incr(key)
                 if value == 1:
-                    # Give an hour extra before expiring, in case someone wants to take a look manually
                     loop.create_task(self.expire_key(key, self.key_manager.get_expiration()))
 
             if value > self.limit:

@@ -212,3 +212,14 @@ async def test_rate_limit_with_all_none(event_loop, redis_client):
     assert await rate_limit.use()
 
     redis_client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not_listening_on_port(6379), reason='Redis is not running')
+async def test_peek_does_not_use(event_loop, redis_client):
+    rate_limit = RateLimitAggregate(redis_client, 'test_peek_does_not_use', 1, None, None, 1)
+
+    assert await rate_limit.use(peek=True)
+    assert await rate_limit.use()
+
+    redis_client.close()

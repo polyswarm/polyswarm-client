@@ -1,5 +1,9 @@
 # Release History
 
+### 2.11.3 (2020-11-23)
+
+* **Fix** - Fix bug in `Worker` `RateLimitAggregate` that recorded double the actual uses.
+
 ### 2.11.2 (2020-11-13)
 
 * **Fix** - Send `JobResponse` with `bit=False` on rate limits, so `JobProcessor` does not report rate limit as error.
