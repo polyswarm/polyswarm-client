@@ -15,8 +15,7 @@ from polyswarmclient.server.events import Bounty, BountyResult
 logger = logging.getLogger(__name__)
 
 NCT_WEI_CONVERSION = 10 ** 18
-ASSERTION_PHASE = 'assert'
-ARBITRATION_PHASE = 'vote'
+BID_PHASE = os.environ.get('BID_PHASE', 'assert')
 MIN_ALLOWED_BID = os.environ.get('MIN_ALLOWED_BID', 1 / 12 * NCT_WEI_CONVERSION)
 MAX_ALLOWED_BID = os.environ.get('MAX_ALLOWED_BID', NCT_WEI_CONVERSION)
 
@@ -81,7 +80,7 @@ class AbstractParticipant(object):
         except (DecodeError, aiohttp.ClientError, aioredis.errors.RedisError):
             scan_result = ScanResult()
 
-        if bounty.phase.lower() == ASSERTION_PHASE:
+        if bounty.phase.lower() == BID_PHASE:
             bid = self.bid(bounty.guid, [scan_result.bit], [scan_result.verdict], [scan_result.confidence],
                            [scan_result.metadata], chain='side')
         else:
