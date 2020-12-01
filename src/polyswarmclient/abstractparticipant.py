@@ -2,41 +2,50 @@ import aioredis
 import aiohttp
 import asyncio
 import logging
+import os
 
 from polyswarmartifact import ArtifactType, DecodeError
 from polyswarmartifact.schema import FileArtifact, URLArtifact
 
 from polyswarmclient import Client
 from polyswarmclient.abstractscanner import ScanResult
-from polyswarmclient.exceptions import FatalError
-from polyswarmclient.server.events import Bounty
+from polyswarmclient.exceptions import FatalError, InvalidBidError
+from polyswarmclient.server.events import Bounty, BountyResult
 
 logger = logging.getLogger(__name__)
 
+NCT_WEI_CONVERSION = 10 ** 18
+ASSERTION_PHASE = 'assert'
+ARBITRATION_PHASE = 'vote'
+MIN_ALLOWED_BID = os.environ.get('MIN_ALLOWED_BID', 1 / 12 * NCT_WEI_CONVERSION)
+MAX_ALLOWED_BID = os.environ.get('MAX_ALLOWED_BID', NCT_WEI_CONVERSION)
+
 
 class AbstractParticipant(object):
-    def __init__(self, client, scanner=None):
+    def __init__(self, client, scanner=None, bid_strategy=None):
         self.client = client
         self.scanner = scanner
+        self.bid_strategy = bid_strategy
         self.client.on_run.register(self.__handle_run)
         self.client.on_stop.register(self.__handle_stop)
         self.client.on_new_bounty.register(self.__handle_new_bounty)
 
     @classmethod
-    def connect(cls, host, port, api_key=None, scanner=None, **kwargs):
+    def connect(cls, host, port, api_key=None, scanner=None, bid_strategy=None, **kwargs):
         """Connect the Microengine to a Client.
 
         Args:
             host (str): Host for the webhook
             port (str): Port to listen for webhooks
             api_key (str): Your PolySwarm API key.
-            scanner (Scanner): `Scanner` instance to use.
+            scanner (Scanner): `Scanner` object to use.
+            bid_strategy (BidStrategy): `BidStrategy` object to use
 
         Returns:
             AbstractMicroengine: Microengine instantiated with a Client.
         """
         client = Client(api_key, host, port)
-        return cls(client, scanner=scanner)
+        return cls(client, scanner=scanner, bid_strategy=bid_strategy)
 
     def run(self):
         """
@@ -68,13 +77,20 @@ class AbstractParticipant(object):
             Response JSON parsed from polyswarmd containing placed assertions
         """
         try:
-            result = await self.fetch_and_scan(bounty)
+            scan_result = await self.fetch_and_scan(bounty)
         except (DecodeError, aiohttp.ClientError, aioredis.errors.RedisError):
-            result = ScanResult()
+            scan_result = ScanResult()
 
-        logger.info('Responding to %s bounty %s', bounty.artifact_type, bounty.guid)
+        if bounty.phase.lower() == ASSERTION_PHASE:
+            bid = self.bid(bounty.guid, [scan_result.bit], [scan_result.verdict], [scan_result.confidence],
+                           [scan_result.metadata], chain='side')
+        else:
+            bid = 0
 
-        # await self.client.make_request(method='POST', url=bounty.response_url, json=result.to_json())
+        bounty_result = BountyResult(scan_result.bit, scan_result.verdict, bid, scan_result.metadata)
+        logger.info('Responding to %s bounty %s: %s', bounty.artifact_type, bounty.guid, bounty_result)
+
+        await self.client.make_request(method='POST', url=bounty.response_url, json=bounty_result.to_json())
 
     async def fetch_and_scan(self, bounty: Bounty) -> ScanResult:
         """Fetch and scan all artifacts concurrently
@@ -127,3 +143,34 @@ class AbstractParticipant(object):
 
         raise NotImplementedError(
             'You must 1) override this scan method OR 2) provide a scanner to your Microengine constructor')
+
+    async def bid(self, guid, mask, verdicts, confidences, metadatas, chain):
+        """Override this to implement custom bid calculation logic
+
+        Args:
+            guid (str): GUID of the bounty under analysis
+            mask (list[bool]): mask for the from scanning the bounty files
+            verdicts (list[bool]): scan verdicts from scanning the bounty files
+            confidences (list[float]): Measure of confidence of verdict per artifact ranging from 0.0 to 1.0
+            metadatas (list[str]): metadata blurbs from scanning the bounty files
+            chain (str): Chain we are operating on
+
+        Returns:
+            list[int]: Amount of NCT to bid in base NCT units (10 ^ -18)
+        """
+        if self.bid_strategy is not None:
+            bid = await self.bid_strategy.bid(guid,
+                                              mask,
+                                              verdicts,
+                                              confidences,
+                                              metadatas,
+                                              MIN_ALLOWED_BID,
+                                              MAX_ALLOWED_BID,
+                                              chain)
+            if [b for b in bid if b < MIN_ALLOWED_BID or b > MAX_ALLOWED_BID]:
+                raise InvalidBidError()
+
+            return bid
+
+        raise NotImplementedError(
+            'You must 1) override this bid method OR 2) provide a bid_strategy to your Microengine constructor')

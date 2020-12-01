@@ -21,3 +21,14 @@ class Bounty:
 
     def __post_init__(self):
         self.duration = int(math.floor(datetime.datetime.fromisoformat(self.expiration).timestamp())) - int(math.floor(time.time()))
+
+
+@dataclasses.dataclass()
+class BountyResult:
+    mask: bool
+    verdict: bool
+    bid: int
+    metadata: Dict
+
+    def to_json(self):
+        return dataclasses.asdict(self)

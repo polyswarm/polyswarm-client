@@ -47,6 +47,35 @@ def choose_backend(backend) -> Tuple[str, Type[AbstractMicroengine]]:
     return microengine_module.__name__, microengine_class
 
 
+def choose_bid_strategy(bid_strategy):
+    """Resolves bid strategy name string to implementation
+    Args:
+        bid_strategy (str): Name of the bid strategy to load, either one of the predefined
+            implementations or the name of a module to load
+            (module:ClassName syntax or default of )
+    Returns:
+        (Class): Microengine class of the selected implementation
+    Raises:
+        (Exception): If backend is not found
+    """
+    # determine if this string is a module that can be imported as-is or as sub-module of the microengine package
+    mod_spec = importlib.util.find_spec(bid_strategy) or \
+        importlib.util.find_spec(f'microengine.bidstrategy.{bid_strategy}')
+    if mod_spec is None:
+        raise Exception('Bid strategy `{0}` cannot be imported as a python module.'.format(bid_strategy))
+
+    # have valid module that can be imported, so import it.
+    bid_strategy_module = importlib.import_module(mod_spec.name)
+
+    # find BidStrategy class in this module
+    if hasattr(bid_strategy_module, 'BidStrategy'):
+        bid_strategy_class = bid_strategy_module.BidStrategy
+    else:
+        raise Exception('No bid strategy found {0}'.format(bid_strategy))
+
+    return bid_strategy_module.__name__, bid_strategy_class
+
+
 @click.command()
 @click.option('--log', envvar='LOG_LEVEL', default='WARNING',
               help='App Log level')
@@ -94,11 +123,12 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
         raise FatalError('Invalid log level', 1)
 
     logger_name, microengine_class = choose_backend(backend)
+    bid_logger_name, bid_strategy_class = choose_bid_strategy(bid_strategy)
 
     init_logging(['microengine', logger_name], log_format, loglevel)
     init_logging(['polyswarmclient'], log_format, clientlevel)
 
-    microengine_class.connect(host=host, port=port, api_key=api_key).run()
+    microengine_class.connect(host=host, port=port, api_key=api_key, bid_strategy=bid_strategy_class()).run()
 
 
 if __name__ == '__main__':
