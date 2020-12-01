@@ -56,6 +56,8 @@ def choose_backend(backend):
               help='Deprecated')
 @click.option('--api-key', envvar='API_KEY', default='',
               help='API key to use with polyswarmd')
+@click.option('--webhook_secret', envvar='WEBHOOK_SECRET', default='',
+              help='Secret to authenticate incoming requests from polyswarm')
 @click.option('--backend', envvar='BACKEND', required=True,
               help='Backend to use')
 @click.option('--testing', default=0,
@@ -72,8 +74,8 @@ def choose_backend(backend):
               help='Host address to run the server')
 @click.option('--port', envvar='PORT', default='8080',
               help='Port to listen for webhooks')
-def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, testing, allow_key_over_http, chains,
-         log_format, artifact_type, host, port):
+def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, webhook_secret, backend, testing,
+         allow_key_over_http, chains, log_format, artifact_type, host, port):
     """
     Entrypoint for the arbiter driver
     """
@@ -88,7 +90,7 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
     init_logging(['arbiter', logger_name], log_format, loglevel)
     init_logging(['polyswarmclient'], log_format, clientlevel)
 
-    arbiter_class.connect(host=host, port=port, api_key=api_key).run()
+    arbiter_class.connect(host=host, port=port, api_key=api_key, webhook_secret=webhook_secret).run()
 
 
 if __name__ == '__main__':

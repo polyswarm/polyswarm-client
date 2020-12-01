@@ -90,6 +90,8 @@ def choose_bid_strategy(bid_strategy):
 @click.option('--api-key', envvar='API_KEY', default='',
               callback=validate_apikey,
               help='API key to use with polyswarmd')
+@click.option('--webhook_secret', envvar='WEBHOOK_SECRET', default='',
+              help='Secret to authenticate incoming requests from polyswarm')
 @click.option('--backend', envvar='BACKEND', required=True,
               help='Backend to use')
 @click.option('--testing', default=0,
@@ -112,8 +114,8 @@ def choose_bid_strategy(bid_strategy):
               help='Host address to run the server')
 @click.option('--port', envvar='PORT', default='8080',
               help='Port to listen for webhooks')
-def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, testing, allow_key_over_http, chains,
-         log_format, artifact_type, bid_strategy, filter, confidence, host, port):
+def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, webhook_secret, backend, testing,
+         allow_key_over_http, chains, log_format, artifact_type, bid_strategy, filter, confidence, host, port):
     """ Entrypoint for the microengine driver
     """
     loglevel = getattr(logging, log.upper(), None)
@@ -128,7 +130,8 @@ def main(log, client_log, polyswarmd_addr, keyfile, password, api_key, backend, 
     init_logging(['microengine', logger_name], log_format, loglevel)
     init_logging(['polyswarmclient'], log_format, clientlevel)
 
-    microengine_class.connect(host=host, port=port, api_key=api_key, bid_strategy=bid_strategy_class()).run()
+    microengine_class.connect(host=host, port=port, api_key=api_key, webhook_secret=webhook_secret,
+                              bid_strategy=bid_strategy_class()).run()
 
 
 if __name__ == '__main__':

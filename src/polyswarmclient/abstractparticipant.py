@@ -37,13 +37,14 @@ class AbstractParticipant(object):
             host (str): Host for the webhook
             port (str): Port to listen for webhooks
             api_key (str): Your PolySwarm API key.
+            webhooK-secret (str): Your webhook secret
             scanner (Scanner): `Scanner` object to use.
             bid_strategy (BidStrategy): `BidStrategy` object to use
 
         Returns:
             AbstractMicroengine: Microengine instantiated with a Client.
         """
-        client = Client(api_key, host, port)
+        client = Client(api_key, webhook_secret, host, port)
         return cls(client, scanner=scanner, bid_strategy=bid_strategy)
 
     def run(self):
