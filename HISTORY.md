@@ -38,8 +38,6 @@ This is not a comprehensive list of removals, but this should encapsulate all th
 #### Microengine
 
 1. Changed `Microengine.__init__` signature to `__init__(client: Client, scanner: Scanner=None)`
-1. Truncated BidStrategyBase. It is no longer used, but is required for participant-template compatibility
-1. Removed `Microengine.bid()`. Confidence is used directly to determine bid amount.
 1. Only supports single-artifact bounties
 1. `fetch_and_scan_all` replaced with `fetch_and_scan`
 1. Removed `Filter`, and all subclasses.
