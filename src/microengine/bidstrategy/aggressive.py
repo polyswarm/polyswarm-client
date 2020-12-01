@@ -1,4 +1,4 @@
-from polyswarmclient import BidStrategyBase
+from polyswarmclient.bidstrategy import BidStrategyBase
 
 
 class BidStrategy(BidStrategyBase):

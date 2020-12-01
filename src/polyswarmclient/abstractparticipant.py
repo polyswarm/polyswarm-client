@@ -30,7 +30,7 @@ class AbstractParticipant(object):
         self.client.on_new_bounty.register(self.__handle_new_bounty)
 
     @classmethod
-    def connect(cls, host, port, api_key=None, scanner=None, bid_strategy=None, **kwargs):
+    def connect(cls, host, port, api_key=None, webhook_secret=None, scanner=None, bid_strategy=None, **kwargs):
         """Connect the Microengine to a Client.
 
         Args:
@@ -76,21 +76,23 @@ class AbstractParticipant(object):
         Returns:
             Response JSON parsed from polyswarmd containing placed assertions
         """
+        scan_result = ScanResult()
         try:
             scan_result = await self.fetch_and_scan(bounty)
-        except (DecodeError, aiohttp.ClientError, aioredis.errors.RedisError):
-            scan_result = ScanResult()
+        except (DecodeError, aiohttp.ClientError, aioredis.errors.RedisError, ValueError):
+            pass
 
         if bounty.phase.lower() == BID_PHASE:
-            bid = self.bid(bounty.guid, [scan_result.bit], [scan_result.verdict], [scan_result.confidence],
-                           [scan_result.metadata], chain='side')
+            bid = await self.bid(bounty.guid, [scan_result.bit], [scan_result.verdict], [scan_result.confidence],
+                                 [scan_result.metadata], chain='side')
         else:
             bid = 0
-
         bounty_result = BountyResult(scan_result.bit, scan_result.verdict, bid, scan_result.metadata)
         logger.info('Responding to %s bounty %s: %s', bounty.artifact_type, bounty.guid, bounty_result)
 
         await self.client.make_request(method='POST', url=bounty.response_url, json=bounty_result.to_json())
+
+        return []
 
     async def fetch_and_scan(self, bounty: Bounty) -> ScanResult:
         """Fetch and scan all artifacts concurrently
@@ -107,9 +109,9 @@ class AbstractParticipant(object):
             async with aiohttp.ClientSession(raise_for_status=True) as session:
                 async with session.get(bounty.artifact_url) as response:
                     content = await response.content.read()
+                    metadata = FileArtifact(filename=bounty.sha256, filesize=len(content), mimetype=bounty.mimetype,
+                                            sha256=bounty.sha256)
 
-            metadata = FileArtifact(filename=bounty.sha256, filesize=len(content), mimetype=bounty.mimetype,
-                                    sha256=bounty.sha256)
         elif artifact_type == ArtifactType.URL:
             content = bounty.artifact_url
             metadata = URLArtifact(uri=bounty.artifact_url)

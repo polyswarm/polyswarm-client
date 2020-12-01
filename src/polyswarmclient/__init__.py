@@ -12,6 +12,7 @@ from polyswarmclient.backoff_wrapper import BackoffWrapper
 from polyswarmclient.request_rate_limit import RequestRateLimit
 from polyswarmclient.server import Server
 from polyswarmclient.server.events import Bounty
+from polyswarmclient.bidstrategy import BidStrategyBase
 
 logger = logging.getLogger(__name__)
 

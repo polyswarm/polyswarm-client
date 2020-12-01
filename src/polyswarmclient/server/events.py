@@ -23,12 +23,12 @@ class Bounty:
         self.duration = int(math.floor(datetime.datetime.fromisoformat(self.expiration).timestamp())) - int(math.floor(time.time()))
 
 
-@dataclasses.dataclass()
+@dataclasses.dataclass
 class BountyResult:
     mask: bool
     verdict: bool
     bid: int
-    metadata: Dict
+    metadata: str
 
     def to_json(self):
         return dataclasses.asdict(self)
