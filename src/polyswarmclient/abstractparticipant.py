@@ -87,7 +87,7 @@ class AbstractParticipant(object):
                                  [scan_result.metadata], chain='side')
         else:
             bid = 0
-        bounty_result = BountyResult(scan_result.bit, scan_result.verdict, bid, scan_result.metadata)
+        bounty_result = BountyResult(scan_result.verdict_string, bid, scan_result.metadata)
         logger.info('Responding to %s bounty %s: %s', bounty.artifact_type, bounty.guid, bounty_result)
 
         await self.client.make_request(method='POST', url=bounty.response_url, json=bounty_result.to_json())

@@ -25,8 +25,7 @@ class Bounty:
 
 @dataclasses.dataclass
 class BountyResult:
-    mask: bool
-    verdict: bool
+    verdict: str
     bid: int
     metadata: str
 
