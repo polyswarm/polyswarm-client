@@ -6,21 +6,21 @@ import requests
 from flask import Flask, request, jsonify
 
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
-API_KEY = os.environ.get('API_KEY')
+WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET')
 
 application = Flask(__name__)
 
 with open('tests/integration/test-malicious.json') as test:
     malicious_contents = test.read().rstrip()
 
-malicious_digest = hmac.new(API_KEY.encode('utf-8'), malicious_contents.encode('utf-8'), digestmod="sha256").hexdigest()
+malicious_digest = hmac.new(WEBHOOK_SECRET.encode('utf-8'), malicious_contents.encode('utf-8'), digestmod="sha256").hexdigest()
 
 with open('tests/integration/test-benign.json') as test:
     benign_contents = test.read().rstrip()
 
-benign_digest = hmac.new(API_KEY.encode('utf-8'), benign_contents.encode('utf-8'), digestmod="sha256").hexdigest()
+benign_digest = hmac.new(WEBHOOK_SECRET.encode('utf-8'), benign_contents.encode('utf-8'), digestmod="sha256").hexdigest()
 
-empty_digest = hmac.new(API_KEY.encode('utf-8'), b'', digestmod='sha256').hexdigest()
+empty_digest = hmac.new(WEBHOOK_SECRET.encode('utf-8'), b'', digestmod='sha256').hexdigest()
 
 
 @application.route("/", methods=['POST'])
