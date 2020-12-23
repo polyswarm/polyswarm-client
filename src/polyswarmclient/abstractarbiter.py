@@ -32,8 +32,6 @@ class AbstractArbiter(object):
         self.client.on_withdraw_stake_due.register(self.__handle_withdraw_stake_due)
 
         self.testing = testing
-        self.bounties_pending = {}
-        self.bounties_pending_locks = {}
         self.bounties_seen = 0
         self.votes_posted = 0
         self.settles_posted = 0
@@ -119,7 +117,6 @@ class AbstractArbiter(object):
         Args:
             chain (str): Chain we are operating on.
         """
-        self.bounties_pending_locks[chain] = asyncio.Lock()
 
         await self.client.balances.get_nct_balance(chain)
         min_stake = await self.client.staking.parameters[chain].get('minimum_stake')
@@ -191,13 +188,6 @@ class AbstractArbiter(object):
         if artifact_type not in self.valid_artifact_types:
             return []
 
-        async with self.bounties_pending_locks[chain]:
-            bounties_pending = self.bounties_pending.get(chain, set())
-            if guid in bounties_pending:
-                logger.debug('Bounty %s already seen, not responding', guid)
-                return []
-            self.bounties_pending[chain] = bounties_pending | {guid}
-
         self.bounties_seen += 1
         if self.testing > 0:
             if self.bounties_seen > self.testing:
@@ -268,13 +258,6 @@ class AbstractArbiter(object):
         Returns:
             Response JSON parsed from polyswarmd containing emitted events.
         """
-        async with self.bounties_pending_locks[chain]:
-            bounties_pending = self.bounties_pending.get(chain, set())
-            if bounty_guid not in bounties_pending:
-                logger.debug('Bounty %s already settled', bounty_guid)
-                return []
-            self.bounties_pending[chain] = bounties_pending - {bounty_guid}
-
         self.settles_posted += 1
         if self.testing > 0:
             if self.settles_posted > self.testing:

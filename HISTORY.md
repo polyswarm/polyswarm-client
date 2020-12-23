@@ -1,5 +1,9 @@
 # Release History
 
+### 2.11.4 (2020-12-23)
+
+* **Fix** - Stop storing all bounty guids, resolving the infinite memory leak.
+
 ### 2.11.3 (2020-11-23)
 
 * **Fix** - Fix bug in `Worker` `RateLimitAggregate` that recorded double the actual uses.

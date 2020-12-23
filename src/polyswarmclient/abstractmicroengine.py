@@ -1,4 +1,5 @@
 import asyncio
+import cachetools
 import json
 import logging
 
@@ -36,15 +37,12 @@ class AbstractMicroengine(object):
         self.client.on_new_bounty.register(self.__handle_new_bounty)
         self.client.on_reveal_assertion_due.register(self.__handle_reveal_assertion)
         self.client.on_quorum_reached.register(self.__handle_quorum_reached)
-        self.client.on_settled_bounty.register(self.__handle_settled_bounty)
         self.client.on_settle_bounty_due.register(self.__handle_settle_bounty)
         self.client.on_deprecated.register(self.__handle_deprecated)
 
         self.bid_strategy = bid_strategy
 
         self.testing = testing
-        self.bounties_pending = {}
-        self.bounties_pending_locks = {}
         self.bounties_seen = 0
         self.reveals_posted = 0
         self.settles_posted = 0
@@ -180,7 +178,6 @@ class AbstractMicroengine(object):
         Args:
             chain (str): Chain we are operating on.
         """
-        self.bounties_pending_locks[chain] = asyncio.Lock()
         if self.scanner is not None and not await self.scanner.setup():
             raise FatalError('Scanner setup failed', 1)
 
@@ -214,13 +211,6 @@ class AbstractMicroengine(object):
         if artifact_type not in self.valid_artifact_types:
             logger.info('Bounty artifact type %s is not supported', artifact_type)
             return []
-
-        async with self.bounties_pending_locks[chain]:
-            bounties_pending = self.bounties_pending.get(chain, set())
-            if guid in bounties_pending:
-                logger.debug('Bounty %s already seen, not responding', guid)
-                return []
-            self.bounties_pending[chain] = bounties_pending | {guid}
 
         self.bounties_seen += 1
         if self.testing > 0:
@@ -307,9 +297,6 @@ class AbstractMicroengine(object):
     async def __handle_settle_bounty(self, bounty_guid, chain):
         return await self.__settle_bounty(bounty_guid, chain)
 
-    async def __handle_settled_bounty(self, bounty_guid, settler, payout, block_number, txhash, chain):
-        return await self.__settle_bounty(bounty_guid, chain)
-
     async def __settle_bounty(self, bounty_guid, chain):
         """
         Callback registered in `__init__` to handle a settled bounty.
@@ -320,13 +307,6 @@ class AbstractMicroengine(object):
         Returns:
             Response JSON parsed from polyswarmd containing emitted events
         """
-        async with self.bounties_pending_locks[chain]:
-            bounties_pending = self.bounties_pending.get(chain, set())
-            if bounty_guid not in bounties_pending:
-                logger.debug('Bounty %s already settled', bounty_guid)
-                return []
-            self.bounties_pending[chain] = bounties_pending - {bounty_guid}
-
         self.settles_posted += 1
         if self.testing > 0:
             if self.settles_posted > self.testing:

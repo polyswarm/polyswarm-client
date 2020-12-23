@@ -11,7 +11,10 @@ stages:
   - deployment
 
 variables:
-  DOCKER_HOST: tcp://localhost:2375/
+  DOCKER_HOST: tcp://localhost:2376/
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: 1
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   BASE_IMAGE_NAME: polyswarm-client
 
 default:
@@ -25,7 +28,7 @@ default:
 ###############################################################
 dev-pypi:
   tags:
-    - kube-small
+    - kube-small-new
   stage: build
   before_script:
     - pip3 install -q --upgrade pip setuptools twine wheel bump2version
@@ -37,7 +40,7 @@ dev-pypi:
 build-linux:
   stage: build
   tags:
-    - kube-small
+    - kube-small-new
   script:
     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
     - sed "s#FROM polyswarm/polyswarm-transaction#FROM $REPO_URL/polyswarm-transaction#" docker/Dockerfile > docker/Dockerfile.ci
@@ -59,6 +62,9 @@ build-windows:
     - echo "Skip e2e install in before_script for windows participants"
   script:
     - $env:DOCKER_HOST = ''
+    - $env:DOCKER_TLS_CERTDIR = ''
+    - $env:DOCKER_TLS_VERIFY = ''
+    - $env:DOCKER_CERT_PATH = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
     - docker pull $REPO_URL/$BASE_IMAGE_NAME-windows:latest
     - docker build
@@ -77,7 +83,7 @@ build-windows:
 test-linux:
   stage: test
   tags:
-    - kube-small
+    - kube-small-new
   needs:
     - build-linux
   script:
@@ -92,7 +98,7 @@ test-linux:
 test-push-to-pypi:
   stage: test
   tags:
-    - kube-small
+    - kube-small-new
   only:
     - tags
   script:
@@ -117,6 +123,9 @@ test-windows:
     - build-windows
   script:
     - $env:DOCKER_HOST = ''
+    - $env:DOCKER_TLS_CERTDIR = ''
+    - $env:DOCKER_TLS_VERIFY = ''
+    - $env:DOCKER_CERT_PATH = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
     - docker pull $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA
     - docker run $REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA powershell -NoProfile -Command "Set-Location C:/polyswarm/$BASE_IMAGE_NAME; pytest -s --cov=polyswarmclient"
@@ -128,11 +137,11 @@ test-windows:
 e2e:
   stage: e2e
   tags:
-    - kube
+    - kube-new
   needs:
     - test-linux
   except:
-    variables: 
+    variables:
       - $SKIP_E2E
   script:
     - e2e run
@@ -144,7 +153,7 @@ e2e:
 release-tag-linux:
   stage: release
   tags:
-    - kube-small
+    - kube-small-new
   only:
     - tags
   script:
@@ -163,7 +172,7 @@ release-tag-linux:
 release-latest-linux:
   stage: release
   tags:
-    - kube-small
+    - kube-small-new
   only:
     - master
   script:
@@ -181,7 +190,7 @@ release-latest-linux:
 
 release-pypi:
   tags:
-    - kube-small
+    - kube-small-new
   stage: release
   script:
     # release to internal pypi but do not tag yet
@@ -203,6 +212,9 @@ release-tag-windows:
     - tags
   script:
     - $env:DOCKER_HOST = ''
+    - $env:DOCKER_TLS_CERTDIR = ''
+    - $env:DOCKER_TLS_VERIFY = ''
+    - $env:DOCKER_CERT_PATH = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
     # Gets the current image that was built in the CI for this commit
     - docker pull "$REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA"
@@ -226,6 +238,9 @@ release-latest-windows:
     - master
   script:
     - $env:DOCKER_HOST = ''
+    - $env:DOCKER_TLS_CERTDIR = ''
+    - $env:DOCKER_TLS_VERIFY = ''
+    - $env:DOCKER_CERT_PATH = ''
     - aws ecr get-login --no-include-email --region us-east-1 | Powershell
     # Gets the current image that was built in the CI for this commit
     - docker pull "$REPO_URL/$BASE_IMAGE_NAME-windows:$CI_COMMIT_SHA"
