@@ -272,10 +272,3 @@ kick-after-complete13:
     - master
   trigger: externalci/poly-mon
 
-kick-after-complete14:
-  stage: deployment
-  variables:
-    BASE_IMAGE_NAME: consumer
-  only:
-    - master
-  trigger: externalci/consumer
