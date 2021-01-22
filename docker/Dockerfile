@@ -1,4 +1,4 @@
-FROM 005789955001.dkr.ecr.us-east-1.amazonaws.com/python:3.7-slim-buster
+FROM python:3.7-slim-buster
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CFLAGS="-pipe -mtune=skylake-avx512 -Os" CXXFLAGS="$CFLAGS" LDFLAGS="-Wl,-O1"
