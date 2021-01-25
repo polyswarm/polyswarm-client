@@ -43,7 +43,7 @@ build-linux:
     - kube-small-new
   script:
     - e2e dependencies docker/Dockerfile $BASE_IMAGE_NAME
-    - sed "s#FROM polyswarm/polyswarm-transaction#FROM $REPO_URL/polyswarm-transaction#" docker/Dockerfile > docker/Dockerfile.ci
+    - sed "s#FROM python:3.7-slim-buster#FROM $REPO_URL/python:3.7-slim-buster#" docker/Dockerfile > docker/Dockerfile.ci
     - docker build
       --build-arg PIP_INDEX_URL
       -f docker/Dockerfile.ci
