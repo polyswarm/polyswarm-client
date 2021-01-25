@@ -29,7 +29,7 @@ def blob(request):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile_basic_io(blob):
     ## make sure basic io operations work outside ctxmgr
     aat = AsyncArtifactTempfile()
@@ -43,7 +43,7 @@ async def test_async_artifact_tempfile_basic_io(blob):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile_new_blob(blob):
     ## make sure we create a new, temporary file filled with `blob``
     filename = None
@@ -55,7 +55,7 @@ async def test_async_artifact_tempfile_new_blob(blob):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile(blob):
     ## make sure we create a new, temporary file that can be written to in ctxmgr
     filename = None
@@ -69,7 +69,7 @@ async def test_async_artifact_tempfile(blob):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile_filename_blob(blob, tmp_path):
     ## make sure we overwrite an existing file with `blob`
     p = tmp_path / 'existing.exe'
@@ -83,7 +83,7 @@ async def test_async_artifact_tempfile_filename_blob(blob, tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile_filename(blob, tmp_path):
     # make sure we can read the existing file if no blob was passed in
     # while still being able to write to it in the ctxmgr
@@ -100,7 +100,7 @@ async def test_async_artifact_tempfile_filename(blob, tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile_nonexistent_filename_blob(blob, tmp_path):
     ## make sure we create a file with the contents of `blob`
     filename = str(tmp_path / 'newfile.exe')
@@ -112,7 +112,7 @@ async def test_async_artifact_tempfile_nonexistent_filename_blob(blob, tmp_path)
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(1)
 async def test_async_artifact_tempfile_nonexistent_filename(blob, tmp_path):
     ## make sure we create and write to a file and write to it inside the ctxmgr
     filename = str(tmp_path / 'newfile.exe')
