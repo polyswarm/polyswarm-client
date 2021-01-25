@@ -1,5 +1,11 @@
 # Release History
 
+
+### 2.11.5 (2021-01-25)
+
+* **Feature** - Increment all redis counts at once in `JobProcessor`.
+* **Fix** - Increase timeout in AsyncArtifactTempfile tests.
+
 ### 2.11.4 (2020-12-23)
 
 * **Fix** - Stop storing all bounty guids, resolving the infinite memory leak.

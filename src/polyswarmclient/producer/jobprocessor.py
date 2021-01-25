@@ -285,11 +285,15 @@ class JobProcessor:
         time_ratio_key = f'{self.queue}_job_completion_time_ratios_accum'
         time_ratio_count_key = f'{self.queue}_job_completion_time_ratios_count'
 
-        await self.redis.incrby(total_time_key, sum(result_times))
-        await self.redis.incrby(total_time_count_key, len(result_times))
+        transaction = self.redis.multi_exec()
 
-        await self.redis.incrbyfloat(time_ratio_key, sum(result_time_ratio))
-        await self.redis.incrby(time_ratio_count_key, len(result_time_ratio))
+        transaction.incrby(total_time_key, sum(result_times))
+        transaction.incrby(total_time_count_key, len(result_times))
+
+        transaction.incrbyfloat(time_ratio_key, sum(result_time_ratio))
+        transaction.incrby(time_ratio_count_key, len(result_time_ratio))
+
+        await transaction.execute()
 
     async def __update_job_results_counter(self, count):
         """
